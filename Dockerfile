@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # One image serves all roles via different commands:
 #   app     → node server.js           (Next.js standalone)
 #   worker  → node dist/worker.cjs      (node-cron)

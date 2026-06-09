@@ -3,6 +3,10 @@
 # Prerequisites (one-time): see DEPLOY.md (DNS A-record, /opt/toto/.env, BotFather).
 set -euo pipefail
 
+# Use the classic builder path (no buildx/bake dependency, no extra Hub frontend pull).
+export COMPOSE_BAKE=false
+export DOCKER_BUILDKIT=1
+
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ ! -f .env ]; then
