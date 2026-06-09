@@ -3,7 +3,7 @@
 //   11 §5): each bet is validated independently; locked/invalid bets go to
 //   `rejected`, the rest are saved. Server clock enforces deadlines (HTTP 200
 //   overall; per-bet failures in `rejected`). Idempotent via idempotency_key.
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { route, ok, AppError, parseJson, clientMeta } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -64,8 +64,10 @@ export const PUT = route(async (req) => {
 
   const body = await parseJson(req, bodySchema);
 
-  // --- Idempotency: replay the stored response if this key was seen before. ---
+  // --- Idempotency: replay the stored response if this key was seen within 24h
+  // (06 §4). Keys are scoped to this participant, so no cross-user replay. ---
   if (body.idempotency_key) {
+    const cutoff = new Date(Date.now() - 24 * 3600_000);
     const [prev] = await db
       .select({ response: idempotencyKeys.response })
       .from(idempotencyKeys)
@@ -73,6 +75,7 @@ export const PUT = route(async (req) => {
         and(
           eq(idempotencyKeys.participantId, participantId),
           eq(idempotencyKeys.idempotencyKey, body.idempotency_key),
+          gt(idempotencyKeys.createdAt, cutoff),
         ),
       )
       .limit(1);
@@ -163,6 +166,11 @@ export const PUT = route(async (req) => {
       storedHome = derived.predHome;
       storedAway = derived.predAway;
       storedPenWinner = penWinner;
+      // The +1 shootout goal must keep the stored decisive score within 0..99.
+      if (storedHome > 99 || storedAway > 99) {
+        rejected.push({ match_id: bet.match_id, status: "INVALID_SCORE", reason: "Goals must be 0..99" });
+        continue;
+      }
     } else {
       // Group draw or any decisive score: pen_winner must not be set.
       if (penWinner !== null) {

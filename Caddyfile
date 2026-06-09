@@ -6,13 +6,10 @@ toto.icywhitephosphor.tech {
 
 	encode zstd gzip
 
+	# HSTS is edge/HTTPS-scoped; content-security headers (incl. CSP) are owned by
+	# the Next app (next.config.mjs) so they apply identically with or without Caddy.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options    "nosniff"
-		X-Frame-Options           "SAMEORIGIN"
-		Referrer-Policy           "strict-origin-when-cross-origin"
-		# Telegram Mini App webview loads our origin + the telegram-web-app.js script.
-		Content-Security-Policy   "default-src 'self'; img-src 'self' https://t.me data:; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' https://*.telegram.org https://web.telegram.org"
 		-Server
 	}
 

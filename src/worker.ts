@@ -6,8 +6,11 @@
 // import). Bundled for production via `npm run build:worker` → dist/worker.cjs.
 import "dotenv/config";
 import cron from "node-cron";
+import { lt } from "drizzle-orm";
 import { env } from "@/lib/env";
 import { runSheetsExport } from "@/lib/sheets";
+import { db } from "@/db";
+import { idempotencyKeys } from "@/db/schema";
 
 function log(msg: string) {
   console.log(`[worker ${new Date().toISOString()}] ${msg}`);
@@ -29,6 +32,17 @@ if (sheetsConfigured) {
     }
   });
 }
+
+// Daily: purge idempotency keys older than 24h (their replay window; 06 §4).
+cron.schedule("17 4 * * *", async () => {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 3600_000);
+    await db.delete(idempotencyKeys).where(lt(idempotencyKeys.createdAt, cutoff));
+    log("idempotency keys older than 24h purged");
+  } catch (err) {
+    log(`idempotency purge FAILED: ${err instanceof Error ? err.message : String(err)}`);
+  }
+});
 
 // Phase 2 placeholder — football-data.org polling during live windows.
 if (feedConfigured) {
