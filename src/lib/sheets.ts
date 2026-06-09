@@ -73,6 +73,35 @@ async function fullRefresh(sheets: Sheets, spreadsheetId: string, ranges: { shee
   });
 }
 
+// Make every tab readable: frozen + bold dark-green header row, auto-fit columns.
+async function applyFormatting(sheets: Sheets, spreadsheetId: string) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const requests: object[] = [];
+  for (const s of meta.data.sheets ?? []) {
+    const sheetId = s.properties?.sheetId;
+    if (sheetId == null) continue;
+    const cols = s.properties?.gridProperties?.columnCount ?? 26;
+    requests.push(
+      { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+          cell: {
+            userEnteredFormat: {
+              backgroundColor: { red: 0.05, green: 0.16, blue: 0.1 },
+              textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+              verticalAlignment: "MIDDLE",
+            },
+          },
+          fields: "userEnteredFormat(backgroundColor,textFormat,verticalAlignment)",
+        },
+      },
+      { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: cols } } },
+    );
+  }
+  if (requests.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+}
+
 const homeTeam = alias(teams, "h");
 const awayTeam = alias(teams, "a");
 
@@ -199,13 +228,13 @@ async function buildAllBonusBets(): Promise<string[][]> {
     .orderBy(asc(participants.rosterNo), asc(bonusCategories.sortOrder));
 
   const itemRows = await db
-    .select({ betId: bonusBetItems.bonusBetId, code: teams.code, player: bonusBetItems.playerName, pos: bonusBetItems.position })
+    .select({ betId: bonusBetItems.bonusBetId, nameRu: teams.nameRu, player: bonusBetItems.playerName, pos: bonusBetItems.position })
     .from(bonusBetItems)
     .leftJoin(teams, eq(teams.id, bonusBetItems.teamId));
   const picksByBet = new Map<string, string[]>();
   for (const it of itemRows.sort((a, b) => a.pos - b.pos)) {
     if (!picksByBet.has(it.betId)) picksByBet.set(it.betId, []);
-    picksByBet.get(it.betId)!.push(it.code ?? it.player ?? "");
+    picksByBet.get(it.betId)!.push(it.nameRu ?? it.player ?? "");
   }
 
   const pointRows = await db
@@ -283,6 +312,8 @@ export async function runSheetsExport(mode: "FULL" | "AUDIT_APPEND" = "FULL"): P
       { sheetName: "Participants", values: parts },
     ]);
 
+    await applyFormatting(sheets, spreadsheetId);
+
     totalRows = leaderboard.length + results.length + allMatchBets.length + allBonusBets.length + parts.length;
     ok = true;
   } catch (err) {
@@ -301,3 +332,11 @@ export async function runSheetsExport(mode: "FULL" | "AUDIT_APPEND" = "FULL"): P
 
 // Captures the most recent export log id written in the finally block above.
 let lastExportLogId = "";
+
+/** Fire-and-forget export (after admin recompute). No-op if Sheets isn't configured. */
+export function exportSheetsInBackground(): void {
+  if (!env.googleSaJson || !env.sheetId) return;
+  runSheetsExport("FULL").catch((e) =>
+    console.error("background sheets export failed:", e instanceof Error ? e.message : e),
+  );
+}

@@ -126,6 +126,10 @@ if (sheetsConfigured) {
       log(`sheets export FAILED: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
+  // Populate the sheet immediately on boot (don't wait for the first 10-min tick).
+  runSheetsExport("FULL")
+    .then((r) => log(`startup sheets export: ${r.rowsWritten} rows`))
+    .catch((err) => log(`startup sheets export FAILED: ${err instanceof Error ? err.message : String(err)}`));
 }
 
 // ---- Daily idempotency-key purge (their 24h replay window; 06 §4) ----------

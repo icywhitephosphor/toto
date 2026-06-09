@@ -5,6 +5,7 @@ import { useServerClock } from "@/lib/client/hooks";
 import { countdown, fmtMsk } from "@/lib/client/format";
 import { useToast } from "./Toast";
 import { StageBadge, Countdown } from "./ui";
+import { flag } from "@/lib/client/flags";
 import type { ApiMatch, MyBet, ApiTeam } from "@/lib/client/types";
 
 const clampScore = (s: string) => Math.max(0, Math.min(20, parseInt(s.replace(/\D/g, ""), 10) || 0));
@@ -57,7 +58,7 @@ function ScoreField({
   return (
     <div className="score-cell">
       <span className="score-team">
-        <span className="flag">{team?.code ?? "?"}</span>
+        <span className="tflag">{team ? flag(team.code) : "🏳️"}</span>
         <span className="tname">{team?.name_ru ?? slot ?? "TBD"}</span>
       </span>
       {editable ? (

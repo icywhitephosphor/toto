@@ -9,6 +9,7 @@ import { db } from "@/db";
 import { bonusCategories, bonusOutcomes, teams } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { recomputeAll } from "@/lib/recompute";
+import { exportSheetsInBackground } from "@/lib/sheets";
 import { TOURNAMENT_ID } from "@/lib/env";
 
 type Ctx = { params: Promise<{ category: string }> };
@@ -78,6 +79,7 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
   });
 
   const result = await recomputeAll(`bonus ${category} settled`, ctx.user.id);
+  exportSheetsInBackground();
 
   return ok({
     category_id: category,

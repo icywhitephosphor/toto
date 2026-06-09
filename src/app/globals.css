@@ -206,6 +206,8 @@ button { font: inherit; color: inherit; }
 .team .flag { width: 26px; height: 20px; border-radius: 4px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.04em; background: var(--surface-3); border: 1px solid var(--line); color: var(--ink-dim); flex: 0 0 auto; }
 .team .tname { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team .tname.sm { font-size: 13px; }
+/* Flag emoji — purely client-side (no DB/assets). */
+.tflag { font-size: 17px; line-height: 1; flex: 0 0 auto; }
 
 /* ---- Scoreboard (tighter, centered) --------------------------------------*/
 .scoreboard { display: flex; align-items: flex-start; justify-content: center; gap: 12px; }

@@ -138,6 +138,17 @@ export const PUT = route(async (req) => {
           throw new AppError(422, "ONE_WINNER_PER_GROUP", "По одной команде из каждой группы");
         }
       }
+      // At most 3 teams from any single group reach the Round of 16.
+      if (c.category_id === "R16_PARTICIPANT") {
+        const perGroup = new Map<string, number>();
+        for (const it of c.items) {
+          const g = groupByTeam.get(it.team_id!) ?? "?";
+          perGroup.set(g, (perGroup.get(g) ?? 0) + 1);
+        }
+        if ([...perGroup.values()].some((n) => n > 3)) {
+          throw new AppError(422, "TOO_MANY_PER_GROUP", "Из одной группы максимум 3 команды");
+        }
+      }
     } else {
       const it = c.items[0];
       if (it.team_id || !it.player_name || it.player_name.trim().length === 0) {

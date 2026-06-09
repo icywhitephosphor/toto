@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown } from "@/lib/client/format";
 import type { ApiTeam, Stage } from "@/lib/client/types";
+import { flag } from "@/lib/client/flags";
 import { IconLock } from "./icons";
 
 export const STAGE_LABEL: Record<Stage, string> = {
@@ -21,11 +22,10 @@ export function StageBadge({ stage, group }: { stage: Stage; group?: string | nu
 }
 
 export function TeamPill({ team, slot, align = "left", size }: { team: ApiTeam | null; slot?: string | null; align?: "left" | "right"; size?: "sm" }) {
-  const flag = team?.code ?? "?";
   const name = team?.name_ru ?? slotLabel(slot) ?? "TBD";
   return (
     <span className="team" style={{ flexDirection: align === "right" ? "row-reverse" : "row", justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
-      <span className="flag">{flag}</span>
+      <span className="tflag">{team ? flag(team.code) : "🏳️"}</span>
       <span className={`tname ${size === "sm" ? "sm" : ""}`}>{name}</span>
     </span>
   );

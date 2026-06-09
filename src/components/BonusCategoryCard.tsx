@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "./Toast";
 import { IconCheck, IconChevron, IconLock } from "./icons";
+import { flag } from "@/lib/client/flags";
 import type { BonusMeta } from "@/lib/client/labels";
 
 export interface TeamLite {
@@ -49,6 +50,10 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
   // "Победители групп": exactly one winner per group — selecting another team in
   // the same group replaces the previous pick (radio-per-group behaviour).
   const onePerGroup = meta.id === "GROUP_WINNER";
+  // From a single group at most 3 teams advance past the group stage (1st, 2nd
+  // and possibly the 3rd-placed), so 1/8-final participants are capped at 3/group.
+  const maxPerGroup = meta.id === "R16_PARTICIPANT" ? 3 : null;
+  const groupOf = (id: string) => teams.find((t) => t.id === id)?.group_code;
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -58,12 +63,18 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
         return next;
       }
       if (onePerGroup) {
-        const group = teams.find((t) => t.id === id)?.group_code;
-        for (const sid of [...next]) {
-          if (teams.find((t) => t.id === sid)?.group_code === group) next.delete(sid);
-        }
+        const group = groupOf(id);
+        for (const sid of [...next]) if (groupOf(sid) === group) next.delete(sid);
         next.add(id);
         return next;
+      }
+      if (maxPerGroup) {
+        const group = groupOf(id);
+        const inGroup = [...next].filter((sid) => groupOf(sid) === group).length;
+        if (inGroup >= maxPerGroup) {
+          toast(`Из группы максимум ${maxPerGroup} команды`, "err");
+          return next;
+        }
       }
       if (next.size < meta.itemCount) next.add(id);
       else toast(`Можно выбрать только ${meta.itemCount}`, "err");
@@ -129,6 +140,9 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
               {onePerGroup && (
                 <div className="faint" style={{ fontSize: 12 }}>По одной команде из каждой группы.</div>
               )}
+              {maxPerGroup && (
+                <div className="faint" style={{ fontSize: 12 }}>Из каждой группы максимум {maxPerGroup} команды.</div>
+              )}
               {byGroup.map(([g, ts]) => (
                 <div key={g}>
                   <div className="eyebrow" style={{ marginBottom: 6 }}>Группа {g}</div>
@@ -147,7 +161,7 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
                             color: on ? "var(--pitch)" : undefined,
                           }}
                         >
-                          <span className="flag" style={{ width: 20, height: 14, fontSize: 8 }}>{t.code}</span>
+                          <span className="tflag" style={{ fontSize: 14 }}>{flag(t.code)}</span>
                           {t.name_ru}
                         </button>
                       );

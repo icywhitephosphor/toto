@@ -3,6 +3,7 @@ import { route, ok } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { requireAdmin } from "@/lib/auth";
 import { recomputeAll } from "@/lib/recompute";
+import { exportSheetsInBackground } from "@/lib/sheets";
 
 export const POST = route(async (req) => {
   const ctx = await requireAdmin(req);
@@ -17,6 +18,7 @@ export const POST = route(async (req) => {
   }
 
   const result = await recomputeAll(reason, ctx.user.id);
+  exportSheetsInBackground();
   return ok({
     score_events_upserted: result.scoreEventsUpserted,
     snapshot_id: result.snapshotId,

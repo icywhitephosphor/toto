@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { matches, matchResults } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { recomputeAll } from "@/lib/recompute";
+import { exportSheetsInBackground } from "@/lib/sheets";
 import { totoScore } from "@/scoring";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -134,6 +135,7 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
   if (confirmed) {
     await recomputeAll(`матч №${match.fifaMatchNo} — результат внесён`, ctx.user.id);
     recomputeTriggered = true;
+    exportSheetsInBackground();
   }
 
   return ok({
