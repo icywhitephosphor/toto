@@ -1,60 +1,57 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import Script from "next/script";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { useToast } from "./Toast";
 import { IconTelegram } from "./icons";
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME ?? "toto_wc2026_bot";
+// The bot is fixed; default here so the client shows the right @username even
+// when NEXT_PUBLIC_BOT_USERNAME isn't available at build time (Docker build).
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME ?? "iwp_toto_bot";
 const DEV = process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
 
 declare global {
   interface Window {
     Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } };
-    onTelegramAuth?: (user: Record<string, unknown>) => void;
   }
 }
+
+type Mode = "detecting" | "telegram" | "browser";
 
 export function LoginScreen() {
   const { mutate } = useBootstrap();
   const toast = useToast();
+  const [mode, setMode] = useState<Mode>("detecting");
+  const [tgError, setTgError] = useState(false);
   const [busy, setBusy] = useState(false);
-  const triedMiniApp = useRef(false);
+  const started = useRef(false);
 
-  // Telegram Mini App: auto-login if launched inside the Telegram webview.
+  const doMiniAppLogin = useCallback(async () => {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return;
+    setTgError(false);
+    try {
+      await api.post("/auth/telegram/miniapp", { init_data: initData });
+      await mutate();
+    } catch {
+      setTgError(true);
+    }
+  }, [mutate]);
+
+  // Detect environment once: inside Telegram → auto-login; browser → show entry.
   useEffect(() => {
-    if (triedMiniApp.current) return;
-    triedMiniApp.current = true;
+    if (started.current) return;
+    started.current = true;
     const initData = window.Telegram?.WebApp?.initData;
     if (initData && initData.length > 0) {
       window.Telegram?.WebApp?.ready?.();
       window.Telegram?.WebApp?.expand?.();
-      (async () => {
-        try {
-          await api.post("/auth/telegram/miniapp", { init_data: initData });
-          await mutate();
-        } catch {
-          /* fall through to manual options */
-        }
-      })();
+      setMode("telegram");
+      void doMiniAppLogin();
+    } else {
+      setMode("browser");
     }
-  }, [mutate]);
-
-  // Login Widget callback (browser fallback).
-  useEffect(() => {
-    window.onTelegramAuth = async (user) => {
-      try {
-        await api.post("/auth/telegram/widget", user);
-        await mutate();
-      } catch (e) {
-        toast(e instanceof ApiError ? e.message : "Ошибка входа", "err");
-      }
-    };
-    return () => {
-      delete window.onTelegramAuth;
-    };
-  }, [mutate, toast]);
+  }, [doMiniAppLogin]);
 
   async function devLogin(tg: number, name: string) {
     setBusy(true);
@@ -70,8 +67,6 @@ export function LoginScreen() {
 
   return (
     <div className="rise" style={{ paddingTop: 18 }}>
-      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
-
       <section className="card" style={{ overflow: "hidden", position: "relative" }}>
         <div style={{ padding: "30px 22px 26px", position: "relative" }}>
           <div className="eyebrow">11 июня — 19 июля · USA · Canada · Mexico</div>
@@ -84,17 +79,30 @@ export function LoginScreen() {
           </p>
 
           <div className="stack gap-10 mt-24">
-            <a
-              className="btn btn-primary btn-block"
-              href={`https://t.me/${BOT_USERNAME}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <IconTelegram width={18} height={18} /> Открыть в Telegram
-            </a>
-            <div className="faint center" style={{ fontSize: 12 }}>
-              Войдите через бота <span className="mono">@{BOT_USERNAME}</span>
-            </div>
+            {mode === "telegram" &&
+              (tgError ? (
+                <>
+                  <div className="banner warn">Не удалось войти автоматически.</div>
+                  <button className="btn btn-primary btn-block" onClick={doMiniAppLogin}>
+                    Повторить вход
+                  </button>
+                </>
+              ) : (
+                <div className="muted center" style={{ fontSize: 15, padding: "6px 0" }}>
+                  Входим…
+                </div>
+              ))}
+
+            {mode === "browser" && (
+              <>
+                <a className="btn btn-primary btn-block" href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer">
+                  <IconTelegram width={18} height={18} /> Открыть в Telegram
+                </a>
+                <div className="faint center" style={{ fontSize: 12 }}>
+                  Приложение работает в Telegram — бот <span className="mono">@{BOT_USERNAME}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -132,12 +140,7 @@ export function LoginScreen() {
             <button className="btn btn-block" type="submit" disabled={busy}>
               {busy ? "…" : "Войти (dev)"}
             </button>
-            <button
-              className="btn btn-gold btn-block btn-sm"
-              type="button"
-              disabled={busy}
-              onClick={() => devLogin(100001, "Админ")}
-            >
+            <button className="btn btn-gold btn-block btn-sm" type="button" disabled={busy} onClick={() => devLogin(100001, "Админ")}>
               Войти администратором (dev)
             </button>
           </form>

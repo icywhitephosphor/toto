@@ -37,6 +37,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Telegram Mini App SDK — load early so initData is available on mount. */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
       <body>
         <Providers>{children}</Providers>

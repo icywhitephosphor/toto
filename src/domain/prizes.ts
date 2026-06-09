@@ -10,9 +10,9 @@ export interface Prize {
 export const PRIZES: Prize[] = [
   { place: 1, amount: 18000, label: "1 место" },
   { place: 2, amount: 10000, label: "2 место" },
-  { place: 3, amount: 6000, label: "3 место" },
-  { place: 4, amount: 5000, label: "4 место" },
-  { place: 5, amount: 3000, label: "5 место" },
+  { place: 3, amount: 8000, label: "3 место" },
+  { place: 4, amount: 4000, label: "4 место" },
+  { place: 5, amount: 2000, label: "5 место" },
 ];
 
 export function prizeForPlace(place: number): Prize | null {
