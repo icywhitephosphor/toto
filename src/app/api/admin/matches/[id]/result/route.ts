@@ -16,13 +16,15 @@ import { totoScore } from "@/scoring";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+const scoreSchema = z.number().int().min(0).max(99).nullable().optional();
+
 const bodySchema = z.object({
-  base_home: z.number().int().nullable().optional(),
-  base_away: z.number().int().nullable().optional(),
-  pen_home: z.number().int().nullable().optional(),
-  pen_away: z.number().int().nullable().optional(),
-  toto_home: z.number().int().nullable().optional(),
-  toto_away: z.number().int().nullable().optional(),
+  base_home: scoreSchema,
+  base_away: scoreSchema,
+  pen_home: scoreSchema,
+  pen_away: scoreSchema,
+  toto_home: scoreSchema,
+  toto_away: scoreSchema,
   result_status: z.enum(["FT", "AET", "PEN", "CANCELLED"]),
   status: z.enum(["SCHEDULED", "LIVE", "AWAITING_CONFIRM", "FINAL", "CANCELLED"]).optional(),
   confirmed: z.boolean().optional(),
@@ -57,8 +59,14 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
   if (!isPlayoff && (body.pen_home != null || body.pen_away != null)) {
     throw new AppError(422, "GROUP_MATCH_HAS_PENALTY", "Group-stage match cannot have penalty scores");
   }
+  if (!isPlayoff && body.result_status === "PEN") {
+    throw new AppError(422, "GROUP_MATCH_HAS_PENALTY", "Group-stage match cannot have penalty scores");
+  }
   if (body.result_status === "PEN" && (body.pen_home == null || body.pen_away == null)) {
     throw new AppError(422, "MISSING_PEN_SCORES", "Penalty result requires pen_home and pen_away");
+  }
+  if (body.result_status === "PEN" && body.pen_home === body.pen_away) {
+    throw new AppError(422, "PENALTY_RESULT_MUST_BE_DECISIVE", "Penalty scores cannot be tied");
   }
 
   // Canonical toto score (05 §2) unless explicitly provided. Null for cancelled.
@@ -79,6 +87,9 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
       totoAway = toto.away;
     } else {
       throw new AppError(422, "MISSING_SCORE", "Provide base_home/base_away (or toto_home/toto_away)");
+    }
+    if (isPlayoff && totoHome === totoAway) {
+      throw new AppError(422, "PLAYOFF_RESULT_MUST_BE_DECISIVE", "Play-off toto score must have a winner");
     }
   }
 
@@ -131,12 +142,8 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
     });
   });
 
-  let recomputeTriggered = false;
-  if (confirmed) {
-    await recomputeAll(`матч №${match.fifaMatchNo} — результат внесён`, ctx.user.id);
-    recomputeTriggered = true;
-    exportSheetsInBackground();
-  }
+  await recomputeAll(`матч №${match.fifaMatchNo} — результат обновлён`, ctx.user.id);
+  exportSheetsInBackground();
 
   return ok({
     match_id: id,
@@ -151,6 +158,6 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
       confirmed,
       source: body.source ?? "ADMIN",
     },
-    recompute_triggered: recomputeTriggered,
+    recompute_triggered: true,
   });
 });
