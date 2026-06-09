@@ -164,7 +164,7 @@ function BonusSettleTab() {
       </select>
 
       {meta.itemType === "PLAYER" ? (
-        <input className="input" placeholder="Имя бомбардира" value={player} onChange={(e) => setPlayer(e.target.value)} />
+        <input className="input" placeholder="Имя бомбардира (рус.), напр. Килиан Мбаппе" value={player} onChange={(e) => setPlayer(e.target.value)} />
       ) : (
         <>
           <div className="faint" style={{ fontSize: 12 }}>Выбрано {picked.size}/{meta.itemCount}</div>

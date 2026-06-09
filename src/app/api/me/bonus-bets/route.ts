@@ -99,9 +99,12 @@ export const PUT = route(async (req) => {
   // Reference data.
   const cats = await db.select().from(bonusCategories).where(eq(bonusCategories.tournamentId, TOURNAMENT_ID));
   const catById = new Map(cats.map((c) => [c.id, c]));
-  const validTeamIds = new Set(
-    (await db.select({ id: teams.id }).from(teams).where(eq(teams.tournamentId, TOURNAMENT_ID))).map((r) => r.id),
-  );
+  const teamRows = await db
+    .select({ id: teams.id, groupCode: teams.groupCode })
+    .from(teams)
+    .where(eq(teams.tournamentId, TOURNAMENT_ID));
+  const validTeamIds = new Set(teamRows.map((r) => r.id));
+  const groupByTeam = new Map(teamRows.map((r) => [r.id, r.groupCode]));
 
   // Validate every category up front (atomic — no partial writes).
   for (const c of body.categories) {
@@ -127,6 +130,13 @@ export const PUT = route(async (req) => {
           throw new AppError(422, "DUPLICATE_TEAM", `Duplicate team in ${c.category_id}`);
         }
         seen.add(it.team_id);
+      }
+      // Group winners must be exactly one team per group (12 distinct groups).
+      if (c.category_id === "GROUP_WINNER") {
+        const groups = new Set(c.items.map((it) => groupByTeam.get(it.team_id!)));
+        if (groups.size !== c.items.length) {
+          throw new AppError(422, "ONE_WINNER_PER_GROUP", "По одной команде из каждой группы");
+        }
       }
     } else {
       const it = c.items[0];

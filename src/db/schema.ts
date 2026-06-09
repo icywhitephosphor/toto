@@ -274,6 +274,17 @@ export const sheetExportLog = pgTable("sheet_export_log", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    matchId: uuid("match_id").notNull().references(() => matches.id),
+    participantId: uuid("participant_id").notNull().references(() => participants.id),
+    thresholdMin: integer("threshold_min").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.matchId, t.participantId, t.thresholdMin] })],
+);
+
 export const idempotencyKeys = pgTable(
   "idempotency_keys",
   {

@@ -36,14 +36,14 @@ function Stepper({ value, set, disabled }: { value: number; set: (n: number) => 
 }
 
 // One side of the scoreboard: team label, a tap-to-type numeric field (native
-// phone keypad), and a small +/- nudge. Locked/TBD matches show a static digit.
+// phone keypad) plus a small +/- nudge when editable; otherwise a static digit.
 function ScoreField({
   team,
   slot,
   value,
   set,
   saving,
-  locked,
+  editable,
   notOpen,
 }: {
   team: ApiTeam | null;
@@ -51,7 +51,7 @@ function ScoreField({
   value: number;
   set: (n: number) => void;
   saving: boolean;
-  locked: boolean;
+  editable: boolean;
   notOpen: boolean;
 }) {
   return (
@@ -60,9 +60,7 @@ function ScoreField({
         <span className="flag">{team?.code ?? "?"}</span>
         <span className="tname">{team?.name_ru ?? slot ?? "TBD"}</span>
       </span>
-      {locked || notOpen ? (
-        <div className="score-box"><span className="score-digit">{notOpen ? "–" : value}</span></div>
-      ) : (
+      {editable ? (
         <input
           className="score-input"
           inputMode="numeric"
@@ -74,8 +72,10 @@ function ScoreField({
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => set(clampScore(e.target.value))}
         />
+      ) : (
+        <div className="score-box"><span className="score-digit">{notOpen ? "–" : value}</span></div>
       )}
-      {!locked && !notOpen && <Stepper value={value} set={set} disabled={saving} />}
+      {editable && <Stepper value={value} set={set} disabled={saving} />}
     </div>
   );
 }
@@ -90,15 +90,26 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
   const [x2, setX2] = useState(myBet?.x2 ?? false);
   const [pen, setPen] = useState<"HOME" | "AWAY" | null>(init.pen);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const notOpen = match.deadline_at === null;
   const locked = notOpen || countdown(match.deadline_at, now).locked;
   const isDraw = h === a;
   const needsPen = match.x2_allowed && isDraw;
+  const hasBet = !!myBet;
 
+  // Editor shows when placing a first bet, or after pressing "Изменить ставку".
+  const showEditor = !locked && (editing || !hasBet);
   const dirty =
     h !== init.h || a !== init.a || x2 !== (myBet?.x2 ?? false) || (needsPen && pen !== init.pen);
-  const hasBet = !!myBet;
+  const canSave = showEditor && !saving && (!hasBet || dirty);
+
+  function resetToSaved() {
+    setH(init.h);
+    setA(init.a);
+    setX2(myBet?.x2 ?? false);
+    setPen(init.pen);
+  }
 
   async function save() {
     if (needsPen && !pen) {
@@ -113,6 +124,7 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
       });
       if (res.saved.some((s) => s.match_id === match.id)) {
         toast("Прогноз сохранён", "ok");
+        setEditing(false);
         onSaved?.();
       } else {
         const r = res.rejected.find((x) => x.match_id === match.id);
@@ -137,12 +149,12 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
       </div>
 
       <div className="scoreboard mt-16">
-        <ScoreField team={match.home_team} slot={match.home_slot} value={h} set={setH} saving={saving} locked={locked} notOpen={notOpen} />
+        <ScoreField team={match.home_team} slot={match.home_slot} value={h} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />
         <span className="score-colon">:</span>
-        <ScoreField team={match.away_team} slot={match.away_slot} value={a} set={setA} saving={saving} locked={locked} notOpen={notOpen} />
+        <ScoreField team={match.away_team} slot={match.away_slot} value={a} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
       </div>
 
-      {match.x2_allowed && needsPen && !locked && (
+      {showEditor && needsPen && (
         <div className="mt-12 stack gap-6">
           <div className="eyebrow">Ничья — кто проходит по пенальти?</div>
           <div className="segmented">
@@ -152,23 +164,36 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
         </div>
       )}
 
-      <div className="row between mt-16 gap-12">
-        {match.x2_allowed && !locked ? (
+      <div className="row between mt-16 gap-12" style={{ minHeight: 38 }}>
+        {showEditor && match.x2_allowed ? (
           <button type="button" className={`x2 ${x2 ? "on" : ""}`} onClick={() => setX2((v) => !v)} aria-pressed={x2}>
             <span className="x2-label">×2</span>
             <span className="x2-track"><span className="x2-knob" /></span>
           </button>
+        ) : !showEditor && hasBet && !locked ? (
+          <span className="chip chip-open">✓ Сохранено{myBet!.x2 ? " · ×2" : ""}</span>
         ) : (
-          <span className="faint" style={{ fontSize: 12 }}>
-            {match.venue ? `${match.venue}${match.city ? ", " + match.city : ""}` : " "}
+          <span className="faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {match.venue ? `${match.venue}${match.city ? ", " + match.city : ""}` : " "}
           </span>
         )}
 
         {locked ? (
           <span className="chip chip-locked">{hasBet ? `Ставка: ${myBet!.pred_home}:${myBet!.pred_away}` : "Без ставки"}</span>
+        ) : showEditor ? (
+          <div className="row gap-8">
+            {hasBet && (
+              <button className="btn btn-ghost btn-sm" disabled={saving} onClick={() => { resetToSaved(); setEditing(false); }}>
+                Отмена
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" disabled={!canSave} onClick={save}>
+              {saving ? "…" : "Сохранить"}
+            </button>
+          </div>
         ) : (
-          <button className="btn btn-primary btn-sm" disabled={!dirty || saving} onClick={save}>
-            {saving ? "…" : dirty ? "Сохранить" : hasBet ? "Сохранено" : "Ставка"}
+          <button className="btn btn-sm" onClick={() => { resetToSaved(); setEditing(true); }}>
+            Изменить ставку
           </button>
         )}
       </div>

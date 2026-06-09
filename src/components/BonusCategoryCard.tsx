@@ -46,11 +46,26 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
 
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name_ru ?? "?";
 
+  // "Победители групп": exactly one winner per group — selecting another team in
+  // the same group replaces the previous pick (radio-per-group behaviour).
+  const onePerGroup = meta.id === "GROUP_WINNER";
+
   function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < meta.itemCount) next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        return next;
+      }
+      if (onePerGroup) {
+        const group = teams.find((t) => t.id === id)?.group_code;
+        for (const sid of [...next]) {
+          if (teams.find((t) => t.id === sid)?.group_code === group) next.delete(sid);
+        }
+        next.add(id);
+        return next;
+      }
+      if (next.size < meta.itemCount) next.add(id);
       else toast(`Можно выбрать только ${meta.itemCount}`, "err");
       return next;
     });
@@ -111,6 +126,9 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
         <div className="card-pad rise" style={{ paddingTop: 0 }}>
           {isTeam ? (
             <div className="stack gap-12">
+              {onePerGroup && (
+                <div className="faint" style={{ fontSize: 12 }}>По одной команде из каждой группы.</div>
+              )}
               {byGroup.map(([g, ts]) => (
                 <div key={g}>
                   <div className="eyebrow" style={{ marginBottom: 6 }}>Группа {g}</div>
@@ -141,7 +159,7 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
           ) : (
             <input
               className="input"
-              placeholder="Например, Kylian Mbappé"
+              placeholder="Например: Килиан Мбаппе"
               value={player}
               onChange={(e) => setPlayer(e.target.value)}
             />

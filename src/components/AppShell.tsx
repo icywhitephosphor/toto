@@ -6,6 +6,7 @@ import { useBootstrap } from "@/lib/client/bootstrap";
 import { api } from "@/lib/client/api";
 import { IconMatches, IconBonus, IconTable, IconAdmin, IconLogout } from "./icons";
 import { ThemeToggle } from "./ThemeToggle";
+import { TelegramBack } from "./TelegramBack";
 
 function Wordmark() {
   return (
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
+      <TelegramBack />
       <div className="app">
         <header className="topbar">
           <Wordmark />
