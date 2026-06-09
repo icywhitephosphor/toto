@@ -1,0 +1,163 @@
+"use client";
+import { useMemo, useState } from "react";
+import { api, ApiError } from "@/lib/client/api";
+import { useToast } from "./Toast";
+import { IconCheck, IconChevron, IconLock } from "./icons";
+import type { BonusMeta } from "@/lib/client/labels";
+
+export interface TeamLite {
+  id: string;
+  code: string;
+  name_ru: string;
+  group_code: string;
+}
+
+interface Props {
+  meta: BonusMeta;
+  teams: TeamLite[];
+  initialTeamIds: string[];
+  initialPlayer: string;
+  locked: boolean;
+  onSaved: () => void;
+}
+
+export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, locked, onSaved }: Props) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set(initialTeamIds));
+  const [player, setPlayer] = useState(initialPlayer);
+  const [saving, setSaving] = useState(false);
+
+  const isTeam = meta.itemType === "TEAM";
+  const count = isTeam ? selected.size : player.trim() ? 1 : 0;
+  const complete = count === meta.itemCount;
+  const dirty = isTeam
+    ? !sameSet(selected, new Set(initialTeamIds))
+    : player.trim() !== initialPlayer.trim();
+
+  const byGroup = useMemo(() => {
+    const m = new Map<string, TeamLite[]>();
+    for (const t of teams) {
+      if (!m.has(t.group_code)) m.set(t.group_code, []);
+      m.get(t.group_code)!.push(t);
+    }
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [teams]);
+
+  const teamName = (id: string) => teams.find((t) => t.id === id)?.name_ru ?? "?";
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < meta.itemCount) next.add(id);
+      else toast(`Можно выбрать только ${meta.itemCount}`, "err");
+      return next;
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const items = isTeam ? [...selected].map((id) => ({ team_id: id })) : [{ player_name: player.trim() }];
+      await api.put("/me/bonus-bets", { categories: [{ category_id: meta.id, items }] });
+      toast(`«${meta.nameRu}» сохранено`, "ok");
+      onSaved();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Ошибка", "err");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <button
+        className="card-pad row between"
+        style={{ width: "100%", background: "transparent", border: "none", textAlign: "left", cursor: locked ? "default" : "pointer" }}
+        onClick={() => !locked && setOpen((v) => !v)}
+      >
+        <div>
+          <div className="section-title" style={{ fontSize: 16 }}>{meta.nameRu}</div>
+          <div className="faint" style={{ fontSize: 12, marginTop: 3 }}>
+            {meta.hint} · {meta.pointsPerCorrect} очк./шт
+          </div>
+        </div>
+        <div className="row gap-8">
+          <span className={`chip ${complete ? "chip-open" : ""}`}>
+            {complete && <IconCheck width={12} height={12} />} {count}/{meta.itemCount}
+          </span>
+          {locked ? <IconLock width={16} height={16} style={{ color: "var(--ink-faint)" }} /> : (
+            <IconChevron width={16} height={16} style={{ color: "var(--ink-faint)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+          )}
+        </div>
+      </button>
+
+      {/* Locked summary */}
+      {locked && (
+        <div className="card-pad" style={{ paddingTop: 0 }}>
+          <div className="row wrap gap-6">
+            {isTeam
+              ? [...selected].map((id) => <span key={id} className="chip">{teamName(id)}</span>)
+              : player
+                ? <span className="chip">{player}</span>
+                : <span className="faint" style={{ fontSize: 13 }}>не заполнено</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Editor */}
+      {open && !locked && (
+        <div className="card-pad rise" style={{ paddingTop: 0 }}>
+          {isTeam ? (
+            <div className="stack gap-12">
+              {byGroup.map(([g, ts]) => (
+                <div key={g}>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Группа {g}</div>
+                  <div className="row wrap gap-6">
+                    {ts.map((t) => {
+                      const on = selected.has(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => toggle(t.id)}
+                          className="chip"
+                          style={{
+                            cursor: "pointer",
+                            borderColor: on ? "var(--pitch)" : undefined,
+                            background: on ? "rgba(196,247,63,0.12)" : undefined,
+                            color: on ? "var(--pitch)" : undefined,
+                          }}
+                        >
+                          <span className="flag" style={{ width: 20, height: 14, fontSize: 8 }}>{t.code}</span>
+                          {t.name_ru}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <input
+              className="input"
+              placeholder="Например, Kylian Mbappé"
+              value={player}
+              onChange={(e) => setPlayer(e.target.value)}
+            />
+          )}
+
+          <button className="btn btn-primary btn-block mt-16" disabled={!complete || !dirty || saving} onClick={save}>
+            {saving ? "…" : complete ? "Сохранить" : `Выберите ${meta.itemCount}`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function sameSet(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}

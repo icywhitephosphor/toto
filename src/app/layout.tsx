@@ -1,0 +1,34 @@
+import "./globals.css";
+import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
+import { Oswald, Onest, JetBrains_Mono } from "next/font/google";
+import { Providers } from "@/components/Providers";
+
+// Cyrillic-complete typeface trio. Oswald = condensed stadium/scoreboard display,
+// Onest = modern grotesk body, JetBrains Mono = numerals/countdowns.
+const oswald = Oswald({ subsets: ["latin", "cyrillic"], weight: ["400", "500", "600", "700"], variable: "--font-oswald", display: "swap" });
+const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", display: "swap" });
+const jbmono = JetBrains_Mono({ subsets: ["latin", "cyrillic"], variable: "--font-jbmono", display: "swap" });
+
+export const metadata: Metadata = {
+  title: "TOTO WC-2026 — Тотализатор на ЧМ-2026",
+  description: "Прогнозы на Чемпионат мира по футболу 2026. Логин через Telegram, живая таблица, бонусы.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#080b09",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="ru" className={`${oswald.variable} ${onest.variable} ${jbmono.variable}`}>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

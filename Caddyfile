@@ -1,0 +1,25 @@
+# TOTO WC-2026 — Caddy reverse proxy with automatic Let's Encrypt TLS.
+# HTTPS is mandatory for Telegram auth (07 §7). Security headers per 12 §4.1.
+
+toto.icywhitephosphor.tech {
+	reverse_proxy app:3000
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "SAMEORIGIN"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		# Telegram Mini App webview loads our origin + the telegram-web-app.js script.
+		Content-Security-Policy   "default-src 'self'; img-src 'self' https://t.me data:; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' https://*.telegram.org https://web.telegram.org"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 7
+		}
+	}
+}

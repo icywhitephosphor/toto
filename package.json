@@ -1,0 +1,51 @@
+{
+  "name": "toto",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TOTO WC-2026 — FIFA World Cup 2026 betting pool",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:worker": "esbuild src/worker.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/worker.cjs --external:pg-native",
+    "build:scripts": "esbuild scripts/migrate.ts scripts/seed.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist --out-extension:.js=.cjs --external:pg-native",
+    "build:all": "next build && npm run build:worker && npm run build:scripts",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "db:setup": "tsx scripts/migrate.ts && tsx scripts/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "worker": "tsx src/worker.ts",
+    "e2e": "tsx e2e/setup-db.ts && playwright test",
+    "e2e:ui": "tsx e2e/setup-db.ts && playwright test --ui"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "googleapis": "^173.0.0",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.17.0",
+    "next": "16.2.7",
+    "node-cron": "^4.2.1",
+    "postgres": "^3.4.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "swr": "^2.4.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
+  }
+}
