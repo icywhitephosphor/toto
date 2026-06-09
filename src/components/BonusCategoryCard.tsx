@@ -50,9 +50,9 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
   // "Победители групп": exactly one winner per group — selecting another team in
   // the same group replaces the previous pick (radio-per-group behaviour).
   const onePerGroup = meta.id === "GROUP_WINNER";
-  // From a single group at most 3 teams advance past the group stage (1st, 2nd
-  // and possibly the 3rd-placed), so 1/8-final participants are capped at 3/group.
-  const maxPerGroup = meta.id === "R16_PARTICIPANT" ? 3 : null;
+  // At most 3 teams leave any group (1st, 2nd and possibly the 3rd-placed), so
+  // they cap the 1/8, 1/4 and 1/2 participant picks at 3 per group.
+  const maxPerGroup = ["R16_PARTICIPANT", "QF_PARTICIPANT", "SF_PARTICIPANT"].includes(meta.id) ? 3 : null;
   const groupOf = (id: string) => teams.find((t) => t.id === id)?.group_code;
 
   function toggle(id: string) {

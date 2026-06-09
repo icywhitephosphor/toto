@@ -138,8 +138,9 @@ export const PUT = route(async (req) => {
           throw new AppError(422, "ONE_WINNER_PER_GROUP", "По одной команде из каждой группы");
         }
       }
-      // At most 3 teams from any single group reach the Round of 16.
-      if (c.category_id === "R16_PARTICIPANT") {
+      // At most 3 teams leave any group, so 1/8, 1/4 and 1/2 participants are
+      // capped at 3 teams per group.
+      if (["R16_PARTICIPANT", "QF_PARTICIPANT", "SF_PARTICIPANT"].includes(c.category_id)) {
         const perGroup = new Map<string, number>();
         for (const it of c.items) {
           const g = groupByTeam.get(it.team_id!) ?? "?";
