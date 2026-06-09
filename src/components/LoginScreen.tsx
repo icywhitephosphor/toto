@@ -109,7 +109,7 @@ export function LoginScreen() {
             height: 220,
             borderRadius: "50%",
             border: "1px solid var(--line)",
-            boxShadow: "0 0 0 22px rgba(196,247,63,0.03)",
+            boxShadow: "0 0 0 22px var(--pitch-faint)",
           }}
         />
       </section>

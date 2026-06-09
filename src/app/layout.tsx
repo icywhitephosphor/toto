@@ -23,9 +23,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Set the theme before first paint to avoid a flash (reads saved choice, else
+// falls back to the OS preference). The toggle later writes localStorage.
+const themeScript = `(function(){try{var t=localStorage.getItem('toto-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru" className={`${oswald.variable} ${onest.variable} ${jbmono.variable}`}>
+    <html
+      lang="ru"
+      data-theme="dark"
+      suppressHydrationWarning
+      className={`${oswald.variable} ${onest.variable} ${jbmono.variable}`}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

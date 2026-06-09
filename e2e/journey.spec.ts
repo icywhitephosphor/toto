@@ -30,6 +30,20 @@ test("login → claim → place a match bet (full UI journey)", async ({ page })
   await expect(page.getByText("Прогноз сохранён")).toBeVisible();
 });
 
+test("score can be typed directly into the field (mobile keypad path)", async ({ page }) => {
+  await page.goto("/");
+  await devLogin(page, 500006, "Тайпер");
+  await claimFirstFree(page);
+  await page.goto("/matches");
+
+  const firstCard = page.locator(".card").first();
+  const inputs = firstCard.locator(".score-input");
+  await inputs.first().fill("3");
+  await inputs.nth(1).fill("1");
+  await firstCard.getByRole("button", { name: "Сохранить" }).click();
+  await expect(page.getByText("Прогноз сохранён")).toBeVisible();
+});
+
 test("server hides others' bets before the deadline (fairness)", async ({ page }) => {
   await page.goto("/");
   await devLogin(page, 500002, "Ревью Тест");

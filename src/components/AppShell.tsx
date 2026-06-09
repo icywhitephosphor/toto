@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { api } from "@/lib/client/api";
 import { IconMatches, IconBonus, IconTable, IconAdmin, IconLogout } from "./icons";
+import { ThemeToggle } from "./ThemeToggle";
 
 function Wordmark() {
   return (
@@ -46,14 +47,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="app">
         <header className="topbar">
           <Wordmark />
-          {data?.user && (
-            <button className="btn btn-ghost btn-sm" onClick={logout} title="Выйти">
-              <span className="mono" style={{ fontSize: 12, maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {participant?.display_name?.split(" ")[0] ?? data.user.first_name ?? "Гость"}
-              </span>
-              <IconLogout width={16} height={16} />
-            </button>
-          )}
+          <div className="topbar-actions">
+            <ThemeToggle />
+            {data?.user && (
+              <button className="btn btn-ghost btn-sm" onClick={logout} title="Выйти">
+                <span className="mono" style={{ fontSize: 12, maxWidth: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {participant?.display_name?.split(" ")[0] ?? data.user.first_name ?? "Гость"}
+                </span>
+                <IconLogout width={16} height={16} />
+              </button>
+            )}
+          </div>
         </header>
         <main>{children}</main>
       </div>

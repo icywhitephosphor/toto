@@ -47,7 +47,7 @@ function Row({ r, me, open, onToggle }: { r: LeaderboardRow; me: boolean; open: 
     <div>
       <button
         className={`lb-row p${r.place} ${me ? "me" : ""}`}
-        style={{ width: "100%", background: me ? "rgba(196,247,63,0.06)" : "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
+        style={{ width: "100%", background: me ? "var(--pitch-faint)" : "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
         onClick={onToggle}
       >
         <span className="lb-place">{r.place}</span>

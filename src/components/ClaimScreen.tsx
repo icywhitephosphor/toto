@@ -54,7 +54,7 @@ export function ClaimScreen() {
               className="lb-row"
               style={{
                 width: "100%",
-                background: selected === p.id ? "rgba(196,247,63,0.06)" : "transparent",
+                background: selected === p.id ? "var(--pitch-faint)" : "transparent",
                 border: "none",
                 textAlign: "left",
                 cursor: p.claimed ? "default" : "pointer",

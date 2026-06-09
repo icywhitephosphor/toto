@@ -125,7 +125,7 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
                           style={{
                             cursor: "pointer",
                             borderColor: on ? "var(--pitch)" : undefined,
-                            background: on ? "rgba(196,247,63,0.12)" : undefined,
+                            background: on ? "var(--pitch-soft)" : undefined,
                             color: on ? "var(--pitch)" : undefined,
                           }}
                         >

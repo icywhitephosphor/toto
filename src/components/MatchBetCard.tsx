@@ -4,8 +4,10 @@ import { api, ApiError, uuid } from "@/lib/client/api";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown, fmtMsk } from "@/lib/client/format";
 import { useToast } from "./Toast";
-import { StageBadge, TeamPill, Countdown } from "./ui";
-import type { ApiMatch, MyBet } from "@/lib/client/types";
+import { StageBadge, Countdown } from "./ui";
+import type { ApiMatch, MyBet, ApiTeam } from "@/lib/client/types";
+
+const clampScore = (s: string) => Math.max(0, Math.min(20, parseInt(s.replace(/\D/g, ""), 10) || 0));
 
 interface SaveResult {
   saved: Array<{ match_id: string; status: string; version: number }>;
@@ -29,6 +31,51 @@ function Stepper({ value, set, disabled }: { value: number; set: (n: number) => 
     <div className="stepper">
       <button type="button" disabled={disabled || value <= 0} onClick={() => set(Math.max(0, value - 1))} aria-label="−">−</button>
       <button type="button" disabled={disabled || value >= 20} onClick={() => set(Math.min(20, value + 1))} aria-label="+">+</button>
+    </div>
+  );
+}
+
+// One side of the scoreboard: team label, a tap-to-type numeric field (native
+// phone keypad), and a small +/- nudge. Locked/TBD matches show a static digit.
+function ScoreField({
+  team,
+  slot,
+  value,
+  set,
+  saving,
+  locked,
+  notOpen,
+}: {
+  team: ApiTeam | null;
+  slot: string | null;
+  value: number;
+  set: (n: number) => void;
+  saving: boolean;
+  locked: boolean;
+  notOpen: boolean;
+}) {
+  return (
+    <div className="score-cell">
+      <span className="score-team">
+        <span className="flag">{team?.code ?? "?"}</span>
+        <span className="tname">{team?.name_ru ?? slot ?? "TBD"}</span>
+      </span>
+      {locked || notOpen ? (
+        <div className="score-box"><span className="score-digit">{notOpen ? "–" : value}</span></div>
+      ) : (
+        <input
+          className="score-input"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={2}
+          value={String(value)}
+          disabled={saving}
+          aria-label={`Голы: ${team?.name_ru ?? "команда"}`}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => set(clampScore(e.target.value))}
+        />
+      )}
+      {!locked && !notOpen && <Stepper value={value} set={set} disabled={saving} />}
     </div>
   );
 }
@@ -90,17 +137,9 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
       </div>
 
       <div className="scoreboard mt-16">
-        <div className="score-cell">
-          <TeamPill team={match.home_team} slot={match.home_slot} />
-          <div className="score-box"><span className="score-digit">{notOpen ? "–" : h}</span></div>
-          {!locked && <Stepper value={h} set={setH} disabled={saving} />}
-        </div>
+        <ScoreField team={match.home_team} slot={match.home_slot} value={h} set={setH} saving={saving} locked={locked} notOpen={notOpen} />
         <span className="score-colon">:</span>
-        <div className="score-cell">
-          <TeamPill team={match.away_team} slot={match.away_slot} align="right" />
-          <div className="score-box"><span className="score-digit">{notOpen ? "–" : a}</span></div>
-          {!locked && <Stepper value={a} set={setA} disabled={saving} />}
-        </div>
+        <ScoreField team={match.away_team} slot={match.away_slot} value={a} set={setA} saving={saving} locked={locked} notOpen={notOpen} />
       </div>
 
       {match.x2_allowed && needsPen && !locked && (
