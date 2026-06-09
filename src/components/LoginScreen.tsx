@@ -80,8 +80,7 @@ export function LoginScreen() {
             <span style={{ color: "var(--pitch)" }}>ЧМ-2026</span>
           </h1>
           <p className="muted" style={{ fontSize: 15, marginTop: 12, maxWidth: 360 }}>
-            Дружеский тотализатор на Чемпионат мира по футболу. Свои прогнозы, честные дедлайны,
-            живая таблица и бонусы. Только для своих — 21 участник.
+            Дружеский тотализатор на Чемпионат мира по футболу.
           </p>
 
           <div className="stack gap-10 mt-24">

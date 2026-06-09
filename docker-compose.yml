@@ -75,6 +75,9 @@ services:
       dockerfile: Dockerfile
     image: toto-app:latest
     command: ["node", "dist/worker.cjs"]
+    # node-cron process — no HTTP port, so the app's port-3000 healthcheck does not apply.
+    healthcheck:
+      disable: true
     restart: unless-stopped
     env_file: .env
     environment:
