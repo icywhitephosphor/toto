@@ -19,12 +19,15 @@ DOMAIN="${DOMAIN:-toto.icywhitephosphor.tech}"
 echo "==> git pull"
 git pull --ff-only origin main
 
-echo "==> build images"
-docker compose build
+echo "==> build images (GIT_SHA cache-bust so new source always ships)"
+docker compose build --build-arg GIT_SHA="$(git rev-parse HEAD)"
 
-echo "==> up (db -> migrate+seed -> app -> worker -> caddy)"
-# The one-shot 'migrate' service applies migrations + seed before app/worker start.
+echo "==> up db + caddy + run migrate/seed (ordering)"
 docker compose up -d
+
+echo "==> force-recreate app + worker onto the freshly built image"
+# Without --force-recreate, compose may keep the old container even after a rebuild.
+docker compose up -d --force-recreate --no-deps app worker
 
 echo "==> status"
 docker compose ps

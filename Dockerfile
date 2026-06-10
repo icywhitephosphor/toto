@@ -17,6 +17,10 @@ RUN npm ci
 FROM base AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
+# GIT_SHA busts the cache from here on every commit, so `COPY . .` + the build
+# always pick up new source (npm ci above stays cached). deploy.sh passes it.
+ARG GIT_SHA=dev
+RUN echo "building commit ${GIT_SHA}"
 COPY . .
 RUN npm run build:all
 
