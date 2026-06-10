@@ -67,6 +67,12 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # api.telegram.org's IPv6 route black-holes from this host and several of its
+    # IPv4 addresses are filtered; 149.154.167.220 (the canonical Bot API IP) is
+    # the reachable one. Pin it so outbound webhook replies don't hang. Revisit
+    # if Telegram ever migrates the API IP.
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
     networks: [toto_net]
 
   worker:
@@ -88,6 +94,9 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # Same Telegram egress pin as `app` (reminders call the Bot API).
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
     networks: [toto_net]
 
   caddy:
