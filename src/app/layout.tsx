@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Oswald, Onest, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { ThemeColorSync } from "@/components/ThemeColorSync";
 
 // Cyrillic-complete typeface trio. Oswald = condensed stadium/scoreboard display,
 // Onest = modern grotesk body, JetBrains Mono = numerals/countdowns.
@@ -15,17 +16,19 @@ export const metadata: Metadata = {
   description: "Прогнозы на Чемпионат мира по футболу 2026. Логин через Telegram, живая таблица, бонусы.",
 };
 
+// theme-color is managed dynamically (ThemeColorSync + the inline script below)
+// so the browser/Telegram chrome tracks the active theme, not a fixed colour.
 export const viewport: Viewport = {
-  themeColor: "#080b09",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
 };
 
-// Set the theme before first paint to avoid a flash (reads saved choice, else
-// falls back to the OS preference). The toggle later writes localStorage.
-const themeScript = `(function(){try{var t=localStorage.getItem('toto-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
+// Set the theme + matching chrome colour before first paint to avoid a flash
+// (reads saved choice, else falls back to the OS preference). The toggle later
+// writes localStorage; ThemeColorSync keeps the meta in step afterwards.
+const themeScript = `(function(){try{var t=localStorage.getItem('toto-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);var c=t==='light'?'#f3f5f1':'#0d0f13';var m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m);}m.setAttribute('content',c);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -41,6 +44,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
       <body>
+        <ThemeColorSync />
         <Providers>{children}</Providers>
       </body>
     </html>

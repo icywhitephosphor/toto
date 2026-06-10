@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, uuid } from "@/lib/client/api";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown, fmtMsk } from "@/lib/client/format";
@@ -93,6 +93,17 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
 
+  // Re-sync inputs when the saved bet changes underneath us — first load
+  // arriving after mount, or an SWR revalidation. Never while the user is
+  // mid-edit, so we don't clobber what they're typing.
+  useEffect(() => {
+    if (editing) return;
+    setH(init.h);
+    setA(init.a);
+    setX2(myBet?.x2 ?? false);
+    setPen(init.pen);
+  }, [init, myBet, editing]);
+
   const notOpen = match.deadline_at === null;
   const locked = notOpen || countdown(match.deadline_at, now).locked;
   const isDraw = h === a;
@@ -173,6 +184,15 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
           </button>
         ) : !showEditor && hasBet && !locked ? (
           <span className="chip chip-open">✓ Сохранено{myBet!.x2 ? " · ×2" : ""}</span>
+        ) : locked && hasBet && (init.pen || myBet!.x2) ? (
+          <span className="row gap-6">
+            {myBet!.x2 && <span className="chip">×2</span>}
+            {init.pen && (
+              <span className="chip">
+                Пен.: {init.pen === "HOME" ? (match.home_team?.name_ru ?? "Хозяева") : (match.away_team?.name_ru ?? "Гости")}
+              </span>
+            )}
+          </span>
         ) : (
           <span className="faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {match.venue ? `${match.venue}${match.city ? ", " + match.city : ""}` : " "}
@@ -180,7 +200,7 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
         )}
 
         {locked ? (
-          <span className="chip chip-locked">{hasBet ? `Ставка: ${myBet!.pred_home}:${myBet!.pred_away}` : "Без ставки"}</span>
+          <span className="chip chip-locked">{hasBet ? `Ставка: ${init.h}:${init.a}` : "Без ставки"}</span>
         ) : showEditor ? (
           <div className="row gap-8">
             {hasBet && (

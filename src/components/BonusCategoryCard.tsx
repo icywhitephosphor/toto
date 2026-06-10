@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "./Toast";
 import { IconCheck, IconChevron, IconLock } from "./icons";
@@ -30,6 +30,18 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
   const [saving, setSaving] = useState(false);
 
   const isTeam = meta.itemType === "TEAM";
+
+  // Re-sync from props when the saved bet changes (first load arriving after
+  // mount, or another device's save). Skip while the editor is open so the
+  // user's in-progress picks survive. Keyed on content, not array identity, so
+  // a fresh `initialTeamIds` array each parent render doesn't reset us.
+  useEffect(() => {
+    if (open) return;
+    setSelected(new Set(initialTeamIds));
+    setPlayer(initialPlayer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isTeam ? [...initialTeamIds].sort().join(",") : initialPlayer]);
+
   const count = isTeam ? selected.size : player.trim() ? 1 : 0;
   const complete = count === meta.itemCount;
   const dirty = isTeam

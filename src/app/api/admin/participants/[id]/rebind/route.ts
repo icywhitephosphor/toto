@@ -41,24 +41,34 @@ export const POST = route<Ctx>(async (req, ctxArg) => {
 
   const oldUserId = participant.userId;
 
-  await db.transaction(async (tx) => {
-    await tx.update(participants).set({ userId: null }).where(eq(participants.id, id));
-    if (newUserId) {
-      await tx.update(participants).set({ userId: newUserId }).where(eq(participants.id, id));
-    }
-    await writeAudit(tx, {
-      actorUserId: ctx.user.id,
-      actorKind: "ADMIN",
-      action: "PARTICIPANT_REBIND",
-      entityType: "participant",
-      entityId: id,
-      before: { user_id: oldUserId },
-      after: { user_id: newUserId },
-      reason: typeof body.reason === "string" ? body.reason : null,
-      ip: meta.ip,
-      userAgent: meta.userAgent,
+  try {
+    await db.transaction(async (tx) => {
+      await tx.update(participants).set({ userId: null }).where(eq(participants.id, id));
+      if (newUserId) {
+        await tx.update(participants).set({ userId: newUserId }).where(eq(participants.id, id));
+      }
+      await writeAudit(tx, {
+        actorUserId: ctx.user.id,
+        actorKind: "ADMIN",
+        action: "PARTICIPANT_REBIND",
+        entityType: "participant",
+        entityId: id,
+        before: { user_id: oldUserId },
+        after: { user_id: newUserId },
+        reason: typeof body.reason === "string" ? body.reason : null,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
     });
-  });
+  } catch (err) {
+    // The pre-check above races with a concurrent rebind; the UNIQUE(user_id)
+    // constraint is the real guard. A 23505 here means newUserId got bound to
+    // another participant in between — surface it as a clean 409, not a 500.
+    if ((err as { code?: string })?.code === "23505") {
+      throw new AppError(409, "USER_ALREADY_BOUND", "User already bound to another participant");
+    }
+    throw err;
+  }
 
   return ok({ participant_id: id, old_user_id: oldUserId, new_user_id: newUserId });
 });

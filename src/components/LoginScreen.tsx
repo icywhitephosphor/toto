@@ -38,19 +38,40 @@ export function LoginScreen() {
     }
   }, [mutate]);
 
-  // Detect environment once: inside Telegram → auto-login; browser → show entry.
+  // Detect environment: inside Telegram → auto-login; browser → show entry.
+  // initData can arrive a tick after mount (SDK still wiring up), so poll
+  // briefly before concluding "browser" — otherwise a real Mini App user can
+  // get stuck on the "Открыть в Telegram" screen.
   useEffect(() => {
     if (started.current) return;
-    started.current = true;
-    const initData = window.Telegram?.WebApp?.initData;
-    if (initData && initData.length > 0) {
-      window.Telegram?.WebApp?.ready?.();
-      window.Telegram?.WebApp?.expand?.();
-      setMode("telegram");
-      void doMiniAppLogin();
-    } else {
+    let cancelled = false;
+    let attempts = 0;
+    const MAX = 20; // ~3s of 150ms ticks before giving up on a Mini App context
+
+    const detect = () => {
+      if (cancelled || started.current) return;
+      const wa = window.Telegram?.WebApp;
+      wa?.ready?.(); // nudge the SDK to surface initData if it has it
+      const initData = wa?.initData;
+      if (initData && initData.length > 0) {
+        started.current = true;
+        wa?.expand?.();
+        setMode("telegram");
+        void doMiniAppLogin();
+        return;
+      }
+      if (attempts++ < MAX) {
+        setTimeout(detect, 150);
+        return;
+      }
+      started.current = true;
       setMode("browser");
-    }
+    };
+
+    detect();
+    return () => {
+      cancelled = true;
+    };
   }, [doMiniAppLogin]);
 
   async function devLogin(tg: number, name: string) {

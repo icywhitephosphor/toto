@@ -104,6 +104,25 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
 
   const [before] = await db.select().from(matchResults).where(eq(matchResults.matchId, id)).limit(1);
 
+  // A result feeds scoring only when it is final (FT/AET/PEN) with a toto score
+  // and either a group match or a confirmed play-off (mirrors recompute's
+  // `usable` filter). Recompute when that membership changes — became usable,
+  // stayed usable, or stopped being usable (cancel / un-confirm) — so we don't
+  // run it for an inconsequential AWAITING_CONFIRM save and can report honestly.
+  const isUsable =
+    !cancelled &&
+    ["FT", "AET", "PEN"].includes(body.result_status) &&
+    totoHome != null &&
+    totoAway != null &&
+    (match.stage === "GROUP" || confirmed === true);
+  const wasUsable =
+    !!before &&
+    ["FT", "AET", "PEN"].includes(before.resultStatus) &&
+    before.totoHome != null &&
+    before.totoAway != null &&
+    (match.stage === "GROUP" || before.confirmed === true);
+  const shouldRecompute = isUsable || wasUsable;
+
   await db.transaction(async (tx) => {
     const values = {
       matchId: id,
@@ -140,10 +159,15 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
+
+    // Recompute in the SAME transaction: if scoring throws, the result write
+    // rolls back too, so the leaderboard can never lag a committed result.
+    if (shouldRecompute) {
+      await recomputeAll(`матч №${match.fifaMatchNo} — результат обновлён`, ctx.user.id, tx);
+    }
   });
 
-  await recomputeAll(`матч №${match.fifaMatchNo} — результат обновлён`, ctx.user.id);
-  exportSheetsInBackground();
+  if (shouldRecompute) exportSheetsInBackground();
 
   return ok({
     match_id: id,
@@ -158,6 +182,6 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
       confirmed,
       source: body.source ?? "ADMIN",
     },
-    recompute_triggered: true,
+    recompute_triggered: shouldRecompute,
   });
 });

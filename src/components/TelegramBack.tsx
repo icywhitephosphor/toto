@@ -18,15 +18,31 @@ export function TelegramBack() {
   const router = useRouter();
 
   useEffect(() => {
-    const wa = (window as unknown as { Telegram?: { WebApp?: { BackButton?: BackButton } } }).Telegram?.WebApp;
-    const bb = wa?.BackButton;
-    if (!bb) return;
+    let cancelled = false;
+    let attempts = 0;
     const handler = () => router.back();
-    if (ROOTS.has(pathname)) bb.hide?.();
-    else bb.show?.();
-    bb.onClick?.(handler);
+    let bound: BackButton | null = null;
+
+    // The Mini App SDK may not have populated BackButton on first paint; poll
+    // briefly instead of silently giving up (no back button for the session).
+    const apply = () => {
+      if (cancelled) return;
+      const wa = (window as unknown as { Telegram?: { WebApp?: { BackButton?: BackButton } } }).Telegram?.WebApp;
+      const bb = wa?.BackButton;
+      if (!bb) {
+        if (attempts++ < 20) setTimeout(apply, 150);
+        return;
+      }
+      bound = bb;
+      if (ROOTS.has(pathname)) bb.hide?.();
+      else bb.show?.();
+      bb.onClick?.(handler);
+    };
+    apply();
+
     return () => {
-      bb.offClick?.(handler);
+      cancelled = true;
+      bound?.offClick?.(handler);
     };
   }, [pathname, router]);
 

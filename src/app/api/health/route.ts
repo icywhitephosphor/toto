@@ -10,8 +10,11 @@ export async function GET() {
     await db.execute(sql`SELECT 1`);
     return Response.json({ ok: true, status: "ok", db: "up", service: "toto", ts: new Date().toISOString() });
   } catch (e) {
+    // Log the real error server-side; never leak it (it can carry the DSN,
+    // internal hostnames, etc.) to an unauthenticated health endpoint.
+    console.error("[health] DB check failed:", e);
     return Response.json(
-      { ok: false, status: "error", db: "down", error: String(e), ts: new Date().toISOString() },
+      { ok: false, status: "error", db: "down", ts: new Date().toISOString() },
       { status: 503 },
     );
   }

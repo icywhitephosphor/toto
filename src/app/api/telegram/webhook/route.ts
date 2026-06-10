@@ -10,8 +10,16 @@ const APP_URL = "https://toto.icywhitephosphor.tech";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ok = () => NextResponse.json({ ok: true });
   try {
+    // Fail-closed: without a configured secret we cannot prove a caller is
+    // Telegram, so we ignore everything rather than letting anyone who knows
+    // the URL make the bot send messages. The webhook is registered with this
+    // same value as `secret_token`, so Telegram echoes it in the header.
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-    if (secret && req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
+    if (!secret) {
+      console.warn("[telegram/webhook] TELEGRAM_WEBHOOK_SECRET unset — ignoring all updates (fail-closed)");
+      return ok();
+    }
+    if (req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
       return ok(); // ignore unverified callers silently
     }
 

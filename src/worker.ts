@@ -38,16 +38,22 @@ function currentThreshold(minutesLeft: number): number | null {
   return null;
 }
 
-async function tgSend(chatId: number, text: string): Promise<boolean> {
+type SendOutcome = "sent" | "blocked" | "transient";
+
+async function tgSend(chatId: number, text: string): Promise<SendOutcome> {
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
     });
-    return res.ok; // false e.g. when the user has never /start-ed the bot
+    if (res.ok) return "sent";
+    // 403 = user blocked the bot or never pressed Start; 400 = chat not found /
+    // deactivated. Neither clears on retry, so this bucket is permanently done.
+    if (res.status === 403 || res.status === 400) return "blocked";
+    return "transient"; // 429 rate-limit, 5xx, etc. — worth retrying next tick
   } catch {
-    return false;
+    return "transient"; // network blip — retry
   }
 }
 
@@ -100,11 +106,15 @@ async function runReminders(): Promise<void> {
       const key = `${m.id}:${p.pid}:${t}`;
       if (logSet.has(key)) continue; // already reminded for this bucket
       const text = `⏰ Ставки на матч <b>${m.home ?? "?"} — ${m.away ?? "?"}</b> закроются примерно через ${THRESHOLD_LABEL[t]}, а прогноза ещё нет. Открой ТОТО и поставь!`;
-      const ok = await tgSend(p.tg, text);
-      // Record the attempt either way so we never spam a user who can't be DM'd.
+      const outcome = await tgSend(p.tg, text);
+      // A transient failure (rate-limit, 5xx, network) must NOT be recorded —
+      // otherwise this bucket is suppressed forever and the user is never
+      // reminded. Only a real send or a permanent block is final; record those
+      // so we don't re-DM a user who got it (or can't get it).
+      if (outcome === "transient") continue;
       await db.insert(notificationLog).values({ matchId: m.id, participantId: p.pid, thresholdMin: t }).onConflictDoNothing();
       logSet.add(key);
-      if (ok) sent += 1;
+      if (outcome === "sent") sent += 1;
     }
   }
   if (sent > 0) log(`deadline reminders sent: ${sent}`);

@@ -215,6 +215,7 @@ async function buildAllBonusBets(): Promise<string[][]> {
   const bets = await db
     .select({
       betId: bonusBets.id,
+      participantId: bonusBets.participantId,
       name: participants.displayName,
       rosterNo: participants.rosterNo,
       categoryId: bonusBets.categoryId,
@@ -245,17 +246,10 @@ async function buildAllBonusBets(): Promise<string[][]> {
   const pointsMap = new Map<string, number>();
   for (const p of pointRows) if (p.categoryId) pointsMap.set(pointKey(p.participantId, p.categoryId), p.points);
 
-  // We need participant id per bet to look up points — re-query betId→participant.
-  const betPart = await db
-    .select({ betId: bonusBets.id, participantId: bonusBets.participantId, categoryId: bonusBets.categoryId })
-    .from(bonusBets);
-  const partByBet = new Map(betPart.map((b) => [b.betId, b]));
-
   return [
     ["display_name", "category_id", "category_name_ru", "picks", "submitted_at", "locked_at", "points"],
     ...bets.map((b) => {
-      const meta = partByBet.get(b.betId);
-      const pts = meta ? pointsMap.get(pointKey(meta.participantId, meta.categoryId)) : undefined;
+      const pts = pointsMap.get(pointKey(b.participantId, b.categoryId));
       return [
         b.name,
         b.categoryId,

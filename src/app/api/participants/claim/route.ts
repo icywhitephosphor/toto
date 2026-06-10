@@ -30,7 +30,7 @@ export const POST = route(async (req) => {
     throw new AppError(400, "MISSING_PARTICIPANT_ID", "participant_id is required");
   }
 
-  const claimed = await db.transaction(async (tx) => {
+  const { row: claimed, created } = await db.transaction(async (tx) => {
     const [target] = await tx
       .select()
       .from(participants)
@@ -52,7 +52,7 @@ export const POST = route(async (req) => {
     // If the row was claimed between SELECT FOR UPDATE and UPDATE (shouldn't
     // happen under the lock), updated is undefined → conflict.
     if (!updated) {
-      if (target.userId === ctx.user.id) return target; // idempotent re-claim
+      if (target.userId === ctx.user.id) return { row: target, created: false }; // idempotent re-claim
       throw new AppError(409, "PARTICIPANT_TAKEN", "Participant already claimed by another user");
     }
 
@@ -68,7 +68,7 @@ export const POST = route(async (req) => {
       userAgent: meta.userAgent,
     });
 
-    return updated;
+    return { row: updated, created: true };
   });
 
   const token = await signSession({
@@ -78,7 +78,9 @@ export const POST = route(async (req) => {
     adm: ctx.user.isAdmin ? true : undefined,
   });
 
-  const res = ok({ participant: participantShape(claimed) }, { status: 201 });
+  // 201 only when this call actually bound the slot; a re-claim of a slot
+  // already ours is idempotent → 200.
+  const res = ok({ participant: participantShape(claimed) }, { status: created ? 201 : 200 });
   setSessionCookie(res, token);
   return res;
 });

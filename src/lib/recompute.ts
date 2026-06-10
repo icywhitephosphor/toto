@@ -18,7 +18,7 @@ import {
 } from "@/db/schema";
 import { scoreMatchBet, scoreBonusTeams, scoreTopScorer, outcome, type Stage } from "@/scoring";
 import { buildLeaderboardRows, type StandingRow } from "./leaderboard";
-import { writeAudit } from "./audit";
+import { writeAudit, type DbExecutor } from "./audit";
 import { TOURNAMENT_ID } from "./env";
 
 export interface RecomputeResult {
@@ -32,12 +32,16 @@ const PLAYOFF = new Set<Stage>(["R32", "R16", "QF", "SF", "THIRD", "FINAL"]);
 export async function recomputeAll(
   reason: string,
   actorUserId: string | null = null,
+  exec?: DbExecutor,
 ): Promise<RecomputeResult> {
   const start = Date.now();
   let snapshotId = "";
   let eventCount = 0;
 
-  await db.transaction(async (tx) => {
+  // When the caller is already inside a transaction it passes `exec` so the
+  // recompute commits atomically with the result/outcome write that triggered
+  // it. Standalone callers (worker, admin recompute endpoint) get their own tx.
+  const run = async (tx: DbExecutor) => {
     const activeParticipants = (
       await tx
         .select({ id: participants.id, status: participants.status })
@@ -225,7 +229,10 @@ export async function recomputeAll(
       after: { score_events: eventCount, snapshot_id: snapshotId, reason },
       reason,
     });
-  });
+  };
+
+  if (exec) await run(exec);
+  else await db.transaction(run);
 
   return { scoreEventsUpserted: eventCount, snapshotId, durationMs: Date.now() - start };
 }

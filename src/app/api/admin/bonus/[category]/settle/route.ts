@@ -58,10 +58,11 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
     outcomeValues.push({ categoryId: category, playerName: actual.trim() });
   }
 
-  const [before] = [
-    await db.select().from(bonusOutcomes).where(eq(bonusOutcomes.categoryId, category)),
-  ];
+  // A category can have several outcome rows (e.g. 12 group winners), so capture
+  // the whole prior set for the audit `before`.
+  const before = await db.select().from(bonusOutcomes).where(eq(bonusOutcomes.categoryId, category));
 
+  let snapshotId = "";
   await db.transaction(async (tx) => {
     await tx.delete(bonusOutcomes).where(eq(bonusOutcomes.categoryId, category));
     await tx.insert(bonusOutcomes).values(outcomeValues);
@@ -76,15 +77,19 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
+
+    // Recompute atomically with the settlement so a scoring failure rolls the
+    // outcome write back instead of leaving stale points on the board.
+    const result = await recomputeAll(`bonus ${category} settled`, ctx.user.id, tx);
+    snapshotId = result.snapshotId;
   });
 
-  const result = await recomputeAll(`bonus ${category} settled`, ctx.user.id);
   exportSheetsInBackground();
 
   return ok({
     category_id: category,
     outcomes_written: outcomeValues.length,
     recompute_triggered: true,
-    snapshot_id: result.snapshotId,
+    snapshot_id: snapshotId,
   });
 });
