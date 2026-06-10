@@ -32,6 +32,16 @@ export const env = {
     const v = optional("ADMIN_TELEGRAM_ID");
     return v ? Number(v) : undefined;
   },
+  // Additional admins by Telegram username (CSV, case-insensitive, @ optional).
+  // Username comes from verified initData/widget payload, so it is trustworthy;
+  // useful when an admin's numeric id isn't known until their first login.
+  get adminUsernames(): Set<string> {
+    const v = optional("ADMIN_TG_USERNAMES");
+    if (!v) return new Set();
+    return new Set(
+      v.split(",").map((s) => s.trim().replace(/^@/, "").toLowerCase()).filter((s) => s.length > 0),
+    );
+  },
   get fdToken() {
     return optional("FD_TOKEN");
   },

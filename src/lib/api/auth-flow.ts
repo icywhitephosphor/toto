@@ -22,7 +22,9 @@ export async function loginWithIdentity(
   meta: ClientMeta,
 ): Promise<LoginResult> {
   const now = new Date();
-  const shouldBeAdmin = env.adminTelegramId != null && identity.id === env.adminTelegramId;
+  const shouldBeAdmin =
+    (env.adminTelegramId != null && identity.id === env.adminTelegramId) ||
+    (identity.username != null && env.adminUsernames.has(identity.username.toLowerCase()));
 
   const updateSet: Record<string, unknown> = {
     username: identity.username ?? null,
