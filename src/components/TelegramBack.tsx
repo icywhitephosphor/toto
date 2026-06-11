@@ -27,7 +27,12 @@ export function TelegramBack() {
     // briefly instead of silently giving up (no back button for the session).
     const apply = () => {
       if (cancelled) return;
-      const wa = (window as unknown as { Telegram?: { WebApp?: { BackButton?: BackButton } } }).Telegram?.WebApp;
+      const wa = (window as unknown as {
+        Telegram?: { WebApp?: { BackButton?: BackButton; disableVerticalSwipes?: () => void } };
+      }).Telegram?.WebApp;
+      // A vertical drag inside scrollable content otherwise triggers the
+      // swipe-down-to-close gesture and kills the Mini App (Bot API 7.7+).
+      try { wa?.disableVerticalSwipes?.(); } catch { /* old client */ }
       const bb = wa?.BackButton;
       if (!bb) {
         if (attempts++ < 20) setTimeout(apply, 150);

@@ -1,8 +1,8 @@
 "use client";
 // Flashscore-style mobile bracket: one column per knockout round, horizontal
-// scroll with snap, round chips on top. Tiles link to the match page. Slots
-// without resolved teams show the projection from the live group tables (≈)
-// or a human-readable slot label.
+// snap-scroll, round chips on top. Pairs that feed the same next-round match
+// are joined by a bracket connector with an arrow. Slots without resolved
+// teams show the projection from the live group tables (≈) or a human label.
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -66,11 +66,18 @@ function Tile({ m }: { m: ApiMatch }) {
         winner={!!r?.winner_team_id && r.winner_team_id === m.away_team?.id}
       />
       <div className="bk-meta">
-        <span>№{m.fifa_match_no}</span>
+        <span>№{m.fifa_match_no}{m.city ? ` · ${m.city}` : ""}</span>
         <span>{m.kickoff_at ? `${fmtMsk(m.kickoff_at)} МСК` : "дата уточняется"}</span>
       </div>
     </Link>
   );
+}
+
+/** Adjacent matches feed the same next-round game — join them visually. */
+function chunkPairs(list: ApiMatch[]): ApiMatch[][] {
+  const out: ApiMatch[][] = [];
+  for (let i = 0; i < list.length; i += 2) out.push(list.slice(i, i + 2));
+  return out;
 }
 
 export function PlayoffBracket() {
@@ -78,22 +85,51 @@ export function PlayoffBracket() {
   const [round, setRound] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  // Column order must follow the bracket, not the match number: adjacent tiles
+  // have to be the two feeders of the same next-round game (e.g. R16 game 89 is
+  // W74 vs W77, so 74 and 77 sit together). Walk back from the final via the
+  // W<no> slots; fall back to numeric order if the chain is broken.
   const byRound = useMemo(() => {
     const all = data?.matches ?? [];
-    return ROUNDS.map((r) =>
+    const numeric = ROUNDS.map((r) =>
       all
         .filter((m) => r.stages.includes(m.stage))
         .sort((a, b) =>
-          // Final column: final on top, third-place game below it.
           a.stage !== b.stage ? (a.stage === "FINAL" ? -1 : 1) : a.fifa_match_no - b.fifa_match_no,
         ),
     );
+    const byNo = new Map(all.map((m) => [m.fifa_match_no, m]));
+    const finalCol = numeric[ROUNDS.length - 1];
+    const final = finalCol.find((m) => m.stage === "FINAL");
+    if (!final) return numeric;
+
+    const walked: ApiMatch[][] = [];
+    let cur = [final];
+    for (let i = ROUNDS.length - 2; i >= 0; i--) {
+      const prev: ApiMatch[] = [];
+      for (const m of cur) {
+        for (const slot of [m.home_slot, m.away_slot]) {
+          const w = slot ? /^W(\d+)$/.exec(slot) : null;
+          const feeder = w ? byNo.get(Number(w[1])) : null;
+          if (feeder) prev.push(feeder);
+        }
+      }
+      if (prev.length !== numeric[i].length) return numeric; // broken chain
+      walked.unshift(prev);
+      cur = prev;
+    }
+    return [...walked, finalCol];
   }, [data]);
 
+  // Horizontal-only scrolling: scrollIntoView can also scroll the page
+  // vertically, and a vertical jerk inside the Mini App triggers the
+  // swipe-down-to-close gesture.
   function go(i: number) {
     setRound(i);
-    const col = wrapRef.current?.children[i] as HTMLElement | undefined;
-    col?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    const el = wrapRef.current;
+    const first = el?.children[0] as HTMLElement | undefined;
+    if (!el || !first) return;
+    el.scrollTo({ left: i * (first.offsetWidth + 12), behavior: "smooth" });
   }
 
   function onScroll() {
@@ -119,7 +155,13 @@ export function PlayoffBracket() {
       <div className="bracket" ref={wrapRef} onScroll={onScroll}>
         {ROUNDS.map((r, i) => (
           <div key={r.key} className="bk-col">
-            {byRound[i].map((m) => <Tile key={m.id} m={m} />)}
+            {r.key === "FINAL"
+              ? byRound[i].map((m) => <Tile key={m.id} m={m} />)
+              : chunkPairs(byRound[i]).map((pair) => (
+                  <div key={pair[0].id} className="bk-pair">
+                    {pair.map((m) => <Tile key={m.id} m={m} />)}
+                  </div>
+                ))}
           </div>
         ))}
       </div>

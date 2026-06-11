@@ -74,6 +74,32 @@ export function LoginScreen() {
     };
   }, [doMiniAppLogin]);
 
+  // Browser path: official Telegram Login Widget (CSP already allows
+  // telegram.org / oauth.telegram.org). Requires the bot domain to be bound
+  // via BotFather /setdomain. The callback posts to /auth/telegram/widget.
+  const widgetRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (mode !== "browser") return;
+    const host = widgetRef.current;
+    if (!host || host.childElementCount > 0) return;
+    (window as unknown as { onTelegramAuth?: (u: unknown) => void }).onTelegramAuth = async (user) => {
+      try {
+        await api.post("/auth/telegram/widget", user as Record<string, unknown>);
+        await mutate();
+      } catch (e) {
+        toast(e instanceof ApiError ? e.message : "Не удалось войти", "err");
+      }
+    };
+    const s = document.createElement("script");
+    s.src = "https://telegram.org/js/telegram-widget.js?22";
+    s.async = true;
+    s.setAttribute("data-telegram-login", BOT_USERNAME);
+    s.setAttribute("data-size", "large");
+    s.setAttribute("data-radius", "14");
+    s.setAttribute("data-onauth", "onTelegramAuth(user)");
+    host.appendChild(s);
+  }, [mode, mutate, toast]);
+
   async function devLogin(tg: number, name: string) {
     setBusy(true);
     try {
@@ -116,11 +142,12 @@ export function LoginScreen() {
 
             {mode === "browser" && (
               <>
-                <a className="btn btn-primary btn-block" href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer">
+                <div ref={widgetRef} className="center" style={{ display: "flex", justifyContent: "center" }} />
+                <a className="btn btn-block" href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer">
                   <IconTelegram width={18} height={18} /> Открыть в Telegram
                 </a>
                 <div className="faint center" style={{ fontSize: 12 }}>
-                  Приложение работает в Telegram — бот <span className="mono">@{BOT_USERNAME}</span>
+                  Вход через Telegram — в браузере кнопкой выше или в мини-приложении бота <span className="mono">@{BOT_USERNAME}</span>
                 </div>
               </>
             )}

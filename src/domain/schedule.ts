@@ -37,6 +37,55 @@ const VENUES: Array<{ venue: string; city: string }> = [
   { venue: "BC Place", city: "Ванкувер" },
 ];
 
+// Official knockout kickoffs (matches 73–104, FIFA calendar as published after
+// the December 2025 draw; transcribed from the МСК wall chart and stored in
+// UTC). Venue/city only where reliably known — display data, never scoring.
+// Betting deadlines for these matches stay NULL until the pairing resolves
+// (11 §2.3); kickoff here only drives the calendar/bracket display.
+export interface KnockoutKickoff {
+  kickoffAt: Date;
+  venue?: string;
+  city?: string;
+}
+
+const ko = (m: number, d: number, h: number, min = 0) =>
+  new Date(Date.UTC(2026, m - 1, d, h, min));
+
+export const KNOCKOUT_KICKOFFS: Record<number, KnockoutKickoff> = {
+  73: { kickoffAt: ko(6, 28, 19), venue: "SoFi Stadium", city: "Лос-Анджелес" },
+  74: { kickoffAt: ko(6, 29, 20, 30), venue: "Gillette Stadium", city: "Бостон" },
+  75: { kickoffAt: ko(6, 30, 1), venue: "Estadio BBVA", city: "Монтеррей" },
+  76: { kickoffAt: ko(6, 29, 17) },
+  77: { kickoffAt: ko(6, 30, 21), venue: "MetLife Stadium", city: "Нью-Йорк" },
+  78: { kickoffAt: ko(6, 30, 17) },
+  79: { kickoffAt: ko(7, 1, 1) },
+  80: { kickoffAt: ko(7, 1, 16) },
+  81: { kickoffAt: ko(7, 2, 0) },
+  82: { kickoffAt: ko(7, 1, 20) },
+  83: { kickoffAt: ko(7, 2, 23), venue: "BMO Field", city: "Торонто" },
+  84: { kickoffAt: ko(7, 2, 19), venue: "SoFi Stadium", city: "Лос-Анджелес" },
+  85: { kickoffAt: ko(7, 3, 3) },
+  86: { kickoffAt: ko(7, 3, 22) },
+  87: { kickoffAt: ko(7, 4, 1, 30) },
+  88: { kickoffAt: ko(7, 3, 18) },
+  89: { kickoffAt: ko(7, 4, 21) },
+  90: { kickoffAt: ko(7, 4, 17) },
+  91: { kickoffAt: ko(7, 5, 20) },
+  92: { kickoffAt: ko(7, 6, 0) },
+  93: { kickoffAt: ko(7, 6, 19) },
+  94: { kickoffAt: ko(7, 7, 0) },
+  95: { kickoffAt: ko(7, 7, 16) },
+  96: { kickoffAt: ko(7, 7, 20) },
+  97: { kickoffAt: ko(7, 9, 20) },
+  98: { kickoffAt: ko(7, 10, 19) },
+  99: { kickoffAt: ko(7, 11, 21) },
+  100: { kickoffAt: ko(7, 12, 1) },
+  101: { kickoffAt: ko(7, 14, 19), venue: "AT&T Stadium", city: "Даллас" },
+  102: { kickoffAt: ko(7, 15, 19), venue: "Mercedes-Benz Stadium", city: "Атланта" },
+  103: { kickoffAt: ko(7, 18, 21), venue: "Hard Rock Stadium", city: "Майами" },
+  104: { kickoffAt: ko(7, 19, 19), venue: "MetLife Stadium", city: "Нью-Йорк" },
+};
+
 // Pairings per matchday given draw positions 1..4. Home team is listed first.
 const MATCHDAY_PAIRS: Array<Array<[number, number]>> = [
   [[1, 2], [3, 4]], // matchday 1

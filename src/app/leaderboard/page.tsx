@@ -5,11 +5,10 @@ import { useBootstrap } from "@/lib/client/bootstrap";
 import { PageHead, CardSkeleton, Empty } from "@/components/ui";
 import { fmtRub, plural } from "@/lib/client/format";
 import { BONUS_LABELS } from "@/lib/client/labels";
-import { PRIZES } from "@/domain/prizes";
+import { PRIZES, PRIZE_POOL, prizeForPlace } from "@/domain/prizes";
 import type { Leaderboard, LeaderboardRow } from "@/lib/client/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-const PRIZE_POOL = PRIZES.reduce((sum, p) => sum + p.amount, 0);
 
 export default function LeaderboardPage() {
   const { data: boot } = useBootstrap();
@@ -31,8 +30,8 @@ export default function LeaderboardPage() {
 
       {rows.length > 0 && (
         <div className="card">
-          {rows.map((r) => (
-            <Row key={r.participant_id} r={r} me={r.participant_id === meId} open={open === r.participant_id}
+          {rows.map((r, i) => (
+            <Row key={r.participant_id} r={r} pos={i + 1} me={r.participant_id === meId} open={open === r.participant_id}
               onToggle={() => setOpen(open === r.participant_id ? null : r.participant_id)} />
           ))}
         </div>
@@ -57,25 +56,25 @@ export default function LeaderboardPage() {
   );
 }
 
-function Row({ r, me, open, onToggle }: { r: LeaderboardRow; me: boolean; open: boolean; onToggle: () => void }) {
+// pos is the visual position in the current order (1..N): while everyone is
+// tied at zero the list is alphabetical and still numbered straight through,
+// per the organizer's call. The prize markers follow this visual position.
+function Row({ r, pos, me, open, onToggle }: { r: LeaderboardRow; pos: number; me: boolean; open: boolean; onToggle: () => void }) {
   const settled = Object.entries(r.bonus_breakdown).filter(([, v]) => v !== null);
-  // Medals and prize-zone styling only once real points exist — before that the
-  // whole roster is tied at place 1 and gold across the board looks broken.
-  const scored = r.total_points > 0;
-  const medal = scored && r.place <= 3 ? MEDALS[r.place - 1] : null;
+  const prize = prizeForPlace(pos);
   return (
     <div>
       <button
-        className={`lb-row ${scored ? `p${r.place}` : ""} ${scored && r.prize ? "prize" : ""} ${me ? "me" : ""}`}
+        className={`lb-row ${pos <= 3 ? `p${pos}` : ""} ${prize ? "prize" : ""} ${me ? "me" : ""}`}
         style={{ width: "100%", background: me ? "var(--pitch-faint)" : "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
         onClick={onToggle}
       >
-        <span className="lb-place">{medal ?? r.place}</span>
+        <span className="lb-place">{pos}</span>
         <span>
           <span className="lb-name">{r.display_name}{me && <span className="faint"> · вы</span>}</span>
           <span className="lb-sub">
             матчи {r.match_points} · бонусы {r.bonus_points}
-            {r.prize && scored && <span style={{ color: "var(--gold)" }}> · приз {fmtRub(r.prize.amount)}</span>}
+            {prize && <span style={{ color: "var(--gold)" }}> · {fmtRub(prize.amount)}</span>}
           </span>
         </span>
         <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>

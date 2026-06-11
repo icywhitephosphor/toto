@@ -155,9 +155,16 @@ function PersonView({
 }
 
 function CategoryView({ data }: { data: RevealResp }) {
+  const [catId, setCatId] = useState(data.categories[0]?.category_id ?? "");
+  const shown = data.categories.filter((c) => c.category_id === catId);
   return (
-    <div className="stack gap-16">
-      {data.categories.map((c) => (
+    <div className="stack gap-12">
+      <select className="input" value={catId} onChange={(e) => setCatId(e.target.value)} aria-label="Категория">
+        {data.categories.map((c) => (
+          <option key={c.category_id} value={c.category_id}>{c.name_ru}</option>
+        ))}
+      </select>
+      {shown.map((c) => (
         <section key={c.category_id} className="card card-pad">
           <div className="row between">
             <div className="section-title" style={{ fontSize: 16 }}>{c.name_ru}</div>

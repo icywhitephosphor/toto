@@ -1,14 +1,8 @@
 "use client";
-import Link from "next/link";
-import useSWR from "swr";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ClaimScreen } from "@/components/ClaimScreen";
-import { Countdown } from "@/components/ui";
 import { MatchCalendar } from "@/components/MatchCalendar";
-import { IconChevron, IconBonus, IconMatches, IconTable } from "@/components/icons";
-import { fmtRub } from "@/lib/client/format";
-import type { Leaderboard } from "@/lib/client/types";
 
 export default function Home() {
   const { data, isLoading } = useBootstrap();
@@ -26,15 +20,12 @@ export default function Home() {
   return <Hub />;
 }
 
+// Home is deliberately just the greeting + the game-day calendar: bonuses,
+// the leaderboard and the bracket live behind their own tabs in the tab bar.
 function Hub() {
   const { data } = useBootstrap();
-  const { data: lb } = useSWR<Leaderboard>("/leaderboard", { refreshInterval: 30000 });
   const me = data?.participant;
-  const dl = data?.deadlines;
   const firstName = me?.display_name?.split(" ")[1] ?? data?.user?.first_name ?? "друг";
-
-  const myRow = lb?.rows.find((r) => r.participant_id === me?.id);
-  const top3 = lb?.rows.slice(0, 3) ?? [];
 
   return (
     <div className="rise" style={{ paddingTop: 6 }}>
@@ -43,92 +34,9 @@ function Hub() {
         Привет, {firstName}!
       </h1>
 
-      {/* Status cards */}
-      <div className="stack gap-12 mt-16">
-        <Link href="/bonus" className="card card-pad row between" style={{ alignItems: "center" }}>
-          <div className="row gap-12">
-            <div style={{ color: "var(--gold)" }}><IconBonus width={26} height={26} /></div>
-            <div>
-              <div className="section-title" style={{ fontSize: 17 }}>Бонусы</div>
-              <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
-                {dl?.bonus_locked ? "Приём закрыт — ставки раскрыты" : "Дедлайн 10 июня, 23:00 МСК"}
-              </div>
-            </div>
-          </div>
-          <div className="row gap-8">
-            {!dl?.bonus_locked && <Countdown target={dl?.bonus_deadline_at ?? null} />}
-            <IconChevron width={18} height={18} style={{ color: "var(--ink-faint)" }} />
-          </div>
-        </Link>
-
-        <Link href="/matches" className="card card-pad row between" style={{ alignItems: "center" }}>
-          <div className="row gap-12">
-            <div style={{ color: "var(--pitch)" }}><IconMatches width={26} height={26} /></div>
-            <div>
-              <div className="section-title" style={{ fontSize: 17 }}>Ближайший матч</div>
-              <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
-                {dl?.next_match_deadline_at ? "До закрытия приёма ставок" : "Расписание уточняется"}
-              </div>
-            </div>
-          </div>
-          <div className="row gap-8">
-            {dl?.next_match_deadline_at && <Countdown target={dl.next_match_deadline_at} />}
-            <IconChevron width={18} height={18} style={{ color: "var(--ink-faint)" }} />
-          </div>
-        </Link>
-      </div>
-
-      {/* Game-day calendar */}
-      <div className="mt-24">
-        <div className="row between" style={{ marginBottom: 10 }}>
-          <h2 className="section-title" style={{ fontSize: 18 }}>Календарь</h2>
-          <Link href="/matches" className="chip chip-open">все матчи</Link>
-        </div>
+      <div className="mt-16">
         <MatchCalendar />
       </div>
-
-      {/* Your standing */}
-      <div className="card card-pad mt-16">
-        <div className="row between">
-          <div className="eyebrow">Ваше место</div>
-          <Link href="/leaderboard" className="chip chip-open"><IconTable width={12} height={12} /> таблица</Link>
-        </div>
-        <div className="row between mt-12" style={{ alignItems: "baseline" }}>
-          <div className="row gap-12" style={{ alignItems: "baseline" }}>
-            <span className="h-display" style={{ fontSize: 46, color: "var(--pitch)" }}>
-              {myRow ? `#${myRow.place}` : "—"}
-            </span>
-            <span className="muted">{me?.display_name}</span>
-          </div>
-          <div className="center">
-            <div className="lb-pts">{myRow?.total_points ?? 0}</div>
-            <div className="eyebrow">очков</div>
-          </div>
-        </div>
-        {myRow?.prize && myRow.total_points > 0 && (
-          <div className="banner gold mt-12">🏆 Призовая зона: {myRow.prize.label} — {fmtRub(myRow.prize.amount)}</div>
-        )}
-      </div>
-
-      {/* Podium preview */}
-      {top3.length > 0 && (
-        <div className="card mt-16">
-          <div className="card-pad" style={{ paddingBottom: 4 }}>
-            <div className="eyebrow">Лидеры</div>
-          </div>
-          {top3.map((r) => {
-            const scored = r.total_points > 0;
-            const medal = scored && r.place <= 3 ? ["🥇", "🥈", "🥉"][r.place - 1] : null;
-            return (
-              <div key={r.participant_id} className={`lb-row ${scored ? `p${r.place}` : ""} ${r.participant_id === me?.id ? "me" : ""}`}>
-                <span className="lb-place">{medal ?? r.place}</span>
-                <span className="lb-name">{r.display_name}</span>
-                <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

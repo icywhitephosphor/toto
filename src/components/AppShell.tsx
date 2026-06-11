@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { api } from "@/lib/client/api";
-import { IconMatches, IconBonus, IconTable, IconAdmin, IconLogout } from "./icons";
+import { IconHome, IconMatches, IconBonus, IconTable, IconAdmin, IconLogout } from "./icons";
 import { ThemeToggle } from "./ThemeToggle";
 import { TelegramBack } from "./TelegramBack";
 
@@ -19,6 +19,7 @@ function Wordmark() {
 }
 
 const TABS = [
+  { href: "/", label: "Главная", Icon: IconHome },
   { href: "/matches", label: "Матчи", Icon: IconMatches },
   { href: "/bonus", label: "Бонусы", Icon: IconBonus },
   { href: "/leaderboard", label: "Таблица", Icon: IconTable },
@@ -68,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="tabbar">
           <div className="tabbar-inner">
             {tabs.map(({ href, label, Icon }) => {
-              const active = pathname === href || pathname.startsWith(href + "/");
+              const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
               return (
                 <Link key={href} href={href} className={`tab ${href === "/admin" ? "admin" : ""} ${active ? "active" : ""}`}>
                   <Icon />

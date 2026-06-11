@@ -17,7 +17,7 @@ import { TOURNAMENT_ID } from "@/lib/env";
 import { GROUP_CODES, TEAMS } from "@/domain/teams";
 import { BONUS_CATEGORIES } from "@/domain/bonus";
 import { KNOCKOUT_MATCHES } from "@/domain/bracket";
-import { buildGroupSchedule } from "@/domain/schedule";
+import { buildGroupSchedule, KNOCKOUT_KICKOFFS } from "@/domain/schedule";
 import { ROSTER } from "@/domain/participants";
 import { PLAYOFF_STAGES } from "@/scoring";
 
@@ -129,7 +129,8 @@ async function main() {
         },
       });
 
-    // 5b. knockout matches (73–104) — slot placeholders, kickoff/deadline NULL.
+    // 5b. knockout matches (73–104) — slot placeholders; kickoff/venue from the
+    // official calendar (display only), deadline stays NULL until teams resolve.
     await tx
       .insert(matches)
       .values(
@@ -139,13 +140,22 @@ async function main() {
           stage: k.stage,
           homeSlot: k.homeSlot,
           awaySlot: k.awaySlot,
+          kickoffAt: KNOCKOUT_KICKOFFS[k.fifaMatchNo]?.kickoffAt ?? null,
+          venue: KNOCKOUT_KICKOFFS[k.fifaMatchNo]?.venue ?? null,
+          city: KNOCKOUT_KICKOFFS[k.fifaMatchNo]?.city ?? null,
           status: "SCHEDULED",
           x2Allowed: PLAYOFF_STAGES.includes(k.stage),
         })),
       )
       .onConflictDoUpdate({
         target: [matches.tournamentId, matches.fifaMatchNo],
-        set: { homeSlot: sqlExcluded("home_slot"), awaySlot: sqlExcluded("away_slot") },
+        set: {
+          homeSlot: sqlExcluded("home_slot"),
+          awaySlot: sqlExcluded("away_slot"),
+          kickoffAt: sqlExcluded("kickoff_at"),
+          venue: sqlExcluded("venue"),
+          city: sqlExcluded("city"),
+        },
       });
 
     // 6. participants (roster)

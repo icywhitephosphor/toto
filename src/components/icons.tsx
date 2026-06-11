@@ -11,6 +11,14 @@ const base = (p: SVGProps<SVGSVGElement>) => ({
   ...p,
 });
 
+export const IconHome = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4 11l8-7 8 7" />
+    <path d="M6 9.5V20h12V9.5" />
+    <path d="M10 20v-5h4v5" />
+  </svg>
+);
+
 export const IconMatches = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="9" />

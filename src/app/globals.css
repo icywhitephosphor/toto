@@ -314,7 +314,12 @@ button { font: inherit; color: inherit; }
 .bk-name.proj { color: var(--ink-dim); }
 .bk-score { font-family: var(--font-display); font-size: 18px; min-width: 18px; text-align: right; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .bk-team.win .bk-name, .bk-team.win .bk-score { color: var(--pitch); }
-.bk-meta { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); }
+.bk-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); }
+.bk-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Pair connector: the two games feeding one next-round match share a bracket. */
+.bk-pair { position: relative; display: flex; flex-direction: column; gap: 10px; padding-right: 18px; }
+.bk-pair::before { content: ""; position: absolute; right: 7px; top: 16%; bottom: 16%; width: 9px; border: 2px solid var(--line-strong); border-left: none; border-radius: 0 10px 10px 0; }
+.bk-pair::after { content: ""; position: absolute; right: 1px; top: 50%; width: 7px; height: 7px; border-top: 2px solid var(--line-strong); border-right: 2px solid var(--line-strong); transform: translateY(-50%) rotate(45deg); }
 
 /* TBD slot / projected team in the score card */
 .score-team .tname.slot { color: var(--ink-faint); font-weight: 500; font-size: 12px; white-space: normal; text-align: center; line-height: 1.25; }
@@ -358,7 +363,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 
 .segmented { display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; overflow-x: auto; scrollbar-width: none; }
 .segmented::-webkit-scrollbar { display: none; }
-.seg { flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink-dim); cursor: pointer; white-space: nowrap; transition: all 0.15s; background: transparent; border: 0; }
+/* Equal-width, centred segments — left-hugging pills read as broken on phones. */
+.seg { flex: 1 1 0; min-width: 0; padding: 8px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink-dim); cursor: pointer; white-space: nowrap; text-align: center; transition: all 0.15s; background: transparent; border: 0; overflow: hidden; text-overflow: ellipsis; }
 .seg.active { background: var(--pitch); color: var(--pitch-ink); }
 
 .toast { position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 16px); transform: translateX(-50%); z-index: 60; background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--ink); padding: 11px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow); animation: rise 0.3s both; }
