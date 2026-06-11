@@ -37,6 +37,8 @@
   --coral: #f5705e;
   --coral-deep: #e0503c;
 
+  --sky: #5aa9e6;
+
   --halo: radial-gradient(120% 60% at 50% -10%, rgba(52, 211, 153, 0.10), transparent 60%);
   --base-gradient: linear-gradient(180deg, #11141a, #0d0f13 42%);
   --line-tex: rgba(220, 255, 235, 0.018);
@@ -77,6 +79,8 @@
 
   --coral: #d9462f;
   --coral-deep: #b8351f;
+
+  --sky: #2f6fb0;
 
   --halo: radial-gradient(120% 55% at 50% -10%, rgba(12, 159, 99, 0.10), transparent 60%);
   --base-gradient: linear-gradient(180deg, #f6f8f3, #eef1ea 60%);
@@ -200,6 +204,12 @@ button { font: inherit; color: inherit; }
 .chip-open { color: var(--pitch-deep); border-color: color-mix(in srgb, var(--pitch) 35%, transparent); background: var(--pitch-faint); }
 .chip-locked { color: var(--ink-faint); }
 .chip-gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 35%, transparent); }
+/* Kickoff countdown — a cool blue, clearly distinct from the green/red betting
+   deadline. color-mix keeps it readable on both themes. */
+.chip-kickoff { color: var(--sky); border-color: color-mix(in srgb, var(--sky) 38%, transparent); background: color-mix(in srgb, var(--sky) 12%, transparent); }
+/* Small dim prefix label inside a countdown chip ("Приём ставок", "До матча"). */
+.cd-label { text-transform: none; letter-spacing: 0.01em; font-weight: 700; opacity: 0.8; margin-right: 5px; }
+.cd-row { display: flex; flex-wrap: wrap; gap: 8px; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--coral) 55%, transparent);} 70% { box-shadow: 0 0 0 7px transparent;} 100% { box-shadow: 0 0 0 0 transparent;} }
 
 .team { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }

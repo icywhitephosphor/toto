@@ -172,8 +172,17 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
           <StageBadge stage={match.stage} group={match.group_code} />
           {match.kickoff_at && <span className="chip faint mono">{fmtMsk(match.kickoff_at)}</span>}
         </div>
-        {notOpen ? <span className="chip chip-locked">Ждём участников</span> : <Countdown target={match.deadline_at} />}
+        {notOpen && <span className="chip chip-locked">Ждём участников</span>}
       </div>
+
+      {/* Two distinct countdowns: when betting closes (deadline, −3h) and when
+          the match actually starts. Different colours so they're never confused. */}
+      {!notOpen && (
+        <div className="cd-row mt-12">
+          <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
+          <Countdown target={match.kickoff_at} label="До матча" tone="kickoff" lockedLabel="Матч идёт" />
+        </div>
+      )}
 
       <div className="scoreboard mt-16">
         <ScoreField team={match.home_team} projected={match.projected_home} slot={match.home_slot} value={h} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />

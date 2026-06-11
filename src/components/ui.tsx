@@ -43,19 +43,37 @@ export function slotLabel(slot?: string | null): string | null {
   return slot;
 }
 
-export function Countdown({ target }: { target: string | null }) {
+// A labelled countdown chip. `tone` picks the colour family:
+//   "deadline" — green, turns red+pulsing in the final hour (betting closes)
+//   "kickoff"  — blue, purely informational (match start)
+// Defaults keep the old call sites (bonus deadline, etc.) unchanged.
+export function Countdown({
+  target,
+  label,
+  tone = "deadline",
+  lockedLabel = "Закрыто",
+}: {
+  target: string | null;
+  label?: string;
+  tone?: "deadline" | "kickoff";
+  lockedLabel?: string;
+}) {
   const now = useServerClock(1000);
   const st = countdown(target, now);
   if (st.locked) {
     return (
-      <span className="chip chip-locked">
-        <IconLock width={12} height={12} /> Закрыто
+      <span className="chip chip-locked countdown">
+        {tone === "deadline" && <IconLock width={12} height={12} />}
+        {label && <span className="cd-label">{label}</span>}
+        {lockedLabel}
       </span>
     );
   }
+  const toneClass = tone === "kickoff" ? "chip-kickoff" : st.urgent ? "chip-live" : "chip-open";
   return (
-    <span className={`chip ${st.urgent ? "chip-live" : "chip-open"} countdown`}>
-      {st.urgent && <span className="dot" />}
+    <span className={`chip ${toneClass} countdown`}>
+      {tone === "deadline" && st.urgent && <span className="dot" />}
+      {label && <span className="cd-label">{label}</span>}
       {st.label}
     </span>
   );
