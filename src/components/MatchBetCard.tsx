@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api, ApiError, uuid } from "@/lib/client/api";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown, fmtMsk } from "@/lib/client/format";
@@ -95,7 +96,7 @@ function ScoreField({
   );
 }
 
-export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet?: MyBet | null; onSaved?: () => void }) {
+export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { match: ApiMatch; myBet?: MyBet | null; onSaved?: () => void; detailsLink?: boolean }) {
   const toast = useToast();
   const now = useServerClock(1000);
   const init = useMemo(() => reconstructReg(myBet), [myBet]);
@@ -246,6 +247,14 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
           </button>
         )}
       </div>
+      )}
+
+      {/* After the deadline everyone's predictions are public (fairness rule) —
+          surface that right on the card. */}
+      {locked && !notOpen && detailsLink && (
+        <Link href={`/match/${match.id}`} className="btn btn-ghost btn-sm btn-block mt-12">
+          Прогнозы участников{match.result ? " и очки" : ""}
+        </Link>
       )}
     </div>
   );
