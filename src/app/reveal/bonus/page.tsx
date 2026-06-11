@@ -182,7 +182,7 @@ function CategoryView({ data }: { data: RevealResp }) {
           )}
           <div className="stack mt-12">
             {c.participants.map((p) => (
-              <div key={p.participant_id} className="lb-row" style={{ gridTemplateColumns: "120px 1fr auto", gap: 10, padding: "10px 0" }}>
+              <div key={p.participant_id} className="lb-row" style={{ gridTemplateColumns: "108px 1fr auto", gap: 10, padding: "10px 0", alignItems: "start" }}>
                 <span className="lb-name" style={{ fontSize: 13 }}>{p.display_name}</span>
                 <span className="faint" style={{ fontSize: 12, lineHeight: 1.5 }}>
                   {p.items.length ? p.items.map(itemText).join(", ") : "—"}

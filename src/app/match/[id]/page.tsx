@@ -55,7 +55,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       {/* Bet editor (only meaningful if open) */}
       {boot?.participant && (
         <div className="mt-16">
-          <MatchBetCard match={m} myBet={data.my_bet} onSaved={() => mutate()} />
+          <MatchBetCard match={m} myBet={data.my_bet} onSaved={() => mutate()} detailsLink={false} />
         </div>
       )}
 

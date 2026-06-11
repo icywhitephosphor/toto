@@ -273,9 +273,10 @@ button { font: inherit; color: inherit; }
 .lb-row.prize { box-shadow: inset 3px 0 0 var(--gold); }
 .lb-place { font-family: var(--font-display); font-size: 22px; color: var(--ink-faint); text-align: center; }
 .lb-row.p1 .lb-place { color: var(--gold); }
-.lb-row.p2 .lb-place { color: var(--ink-dim); }
-.lb-row.p3 .lb-place { color: var(--coral); }
-.lb-name { display: block; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.lb-row.p2 .lb-place { color: #97a4b1; } /* silver */
+.lb-row.p3 .lb-place { color: #c07a3e; } /* bronze */
+/* Participant names wrap to a second line rather than truncating. */
+.lb-name { display: block; font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--ink); }
 .lb-sub { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 3px; }
 .lb-pts { font-family: var(--font-display); font-size: 26px; color: var(--pitch); font-variant-numeric: tabular-nums; }
 .lb-pts.zero { color: var(--ink-faint); }
