@@ -33,8 +33,12 @@ export interface SyncOutcome {
   httpStatus: number | null;
   fixturesUpdated: number;
   resultsApplied: number;
+  liveUpdated: number;
   unmatched: number;
   liveNow: boolean;
+  /** FINISHED matches whose score the provider hasn't published yet — keep
+   *  retrying on a tight cadence so points land the moment it appears. */
+  awaitingScore: number;
   msToNextKickoff: number | null;
   quotaRemaining: number | null;
   error?: string;
@@ -109,8 +113,10 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
     httpStatus: fetched.httpStatus,
     fixturesUpdated: 0,
     resultsApplied: 0,
+    liveUpdated: 0,
     unmatched: 0,
     liveNow: false,
+    awaitingScore: 0,
     msToNextKickoff: null,
     quotaRemaining: fetched.quotaRemaining,
     error: fetched.error,
@@ -196,21 +202,10 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       const swapped =
         (m.homeCode != null && fdHome != null && fdHome !== m.homeCode) ||
         (m.awayCode != null && fdAway != null && fdAway !== m.awayCode);
-      const mapped = mapFinishedScore(fd, swapped);
-      if (!mapped) {
-        // FINISHED but unmappable (e.g. PENALTY_SHOOTOUT with an incomplete
-        // payload) — surface it so the admin can enter the result by hand
-        // instead of it silently never arriving.
-        if (fd.status === "FINISHED") {
-          log(`result map failed: №${m.fifaMatchNo} ${fd.score.duration} — enter manually if it persists`);
-        }
-        continue;
-      }
-      if (!teamsKnown) continue;
       // Sanity: when both our teams are known, FD's pair must equal ours in one
       // of the two orientations. If not, findLocal matched the wrong fixture —
-      // refuse to write a result rather than score the wrong match.
-      if (fdHome && fdAway) {
+      // refuse to write anything rather than score the wrong match.
+      if (teamsKnown && fdHome && fdAway) {
         const ours = new Set([m.homeCode, m.awayCode]);
         if (!ours.has(fdHome) || !ours.has(fdAway)) {
           log(`orientation mismatch: №${m.fifaMatchNo} ours ${m.homeCode}-${m.awayCode} vs fd ${fdHome}-${fdAway} — skipped`);
@@ -224,6 +219,55 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       const adminOwned =
         m.resultStatus != null &&
         (m.resultSource === "ADMIN" || m.resultConfirmed === true || m.resultUpdatedBy != null);
+
+      // Live passthrough: a running match with published numbers is stored as a
+      // LIVE result row — display only, the scoring engine ignores everything
+      // that isn't FT/AET/PEN. Overwritten by the final result when it lands.
+      if ((fd.status === "IN_PLAY" || fd.status === "PAUSED") && teamsKnown && !adminOwned) {
+        const ft = fd.score.fullTime;
+        if (ft.home != null && ft.away != null) {
+          const lh = swapped ? ft.away : ft.home;
+          const la = swapped ? ft.home : ft.away;
+          const sameLive = m.resultStatus === "LIVE" && m.resultBaseHome === lh && m.resultBaseAway === la;
+          if (!sameLive) {
+            const liveValues = {
+              matchId: m.id,
+              resultStatus: "LIVE",
+              baseHome: lh,
+              baseAway: la,
+              penHome: null,
+              penAway: null,
+              totoHome: lh,
+              totoAway: la,
+              winnerTeamId: null,
+              source: "PROVIDER",
+              confirmed: false,
+              providerPayload: fd.score,
+              updatedBy: null,
+              updatedAt: new Date(),
+            };
+            await db.transaction(async (tx) => {
+              await tx.insert(matchResults).values(liveValues).onConflictDoUpdate({ target: matchResults.matchId, set: liveValues });
+              await tx.update(matches).set({ status: "LIVE", updatedAt: new Date() }).where(eq(matches.id, m.id));
+            });
+            outcome.liveUpdated += 1;
+          }
+        }
+        continue;
+      }
+
+      const mapped = mapFinishedScore(fd, swapped);
+      if (!mapped) {
+        // FINISHED but the provider hasn't published the numbers (free-tier
+        // delay) or the payload is incomplete — count it so the worker retries
+        // on a tight cadence, and surface it for a possible manual entry.
+        if (fd.status === "FINISHED" && !adminOwned) {
+          outcome.awaitingScore += 1;
+          log(`result pending: №${m.fifaMatchNo} FINISHED but provider has no score yet`);
+        }
+        continue;
+      }
+      if (!teamsKnown) continue;
       const same =
         m.resultStatus === mapped.resultStatus &&
         m.resultBaseHome === mapped.baseHome &&

@@ -94,6 +94,8 @@ export interface MyBet {
   submitted_at: string;
   updated_at: string;
   version: number;
+  /** Points earned for this match, null until the result is scored. */
+  points?: number | null;
 }
 
 export interface LeaderboardRow {

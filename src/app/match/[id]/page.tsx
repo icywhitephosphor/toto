@@ -5,6 +5,7 @@ import { useBootstrap } from "@/lib/client/bootstrap";
 import { MatchBetCard } from "@/components/MatchBetCard";
 import { TeamPill, StageBadge, Empty, CardSkeleton, BackLink } from "@/components/ui";
 import { fmtMsk } from "@/lib/client/format";
+import { pointsClass, fmtPts } from "@/lib/client/points";
 import { ApiError } from "@/lib/client/api";
 import type { ApiMatch, MyBet } from "@/lib/client/types";
 
@@ -36,19 +37,24 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
         <span className="chip faint mono">матч №{m.fifa_match_no}</span>
       </div>
 
-      {/* Result banner */}
-      {m.result && (
+      {/* Result / live-score banner — only for viewers WITHOUT a bet card
+          below (the card itself shows the score), so nothing renders twice. */}
+      {!boot?.participant && m.result && (
         <div className="card card-pad mt-12 center">
-          <div className="eyebrow">Результат</div>
+          <div className="eyebrow" style={m.result.result_status === "LIVE" ? { color: "var(--coral)" } : undefined}>
+            {m.result.result_status === "LIVE" ? "● Матч идёт" : "Результат"}
+          </div>
           <div className="row" style={{ justifyContent: "center", gap: 18, marginTop: 8, alignItems: "center" }}>
             <TeamPill team={m.home_team} slot={m.home_slot} />
             <span className="h-display" style={{ fontSize: 40 }}>{m.result.toto_home}:{m.result.toto_away}</span>
             <TeamPill team={m.away_team} slot={m.away_slot} align="right" />
           </div>
-          <div className="faint mono mt-8" style={{ fontSize: 12 }}>
-            {m.result.result_status}
-            {m.result.pen_home != null && ` · пенальти ${m.result.pen_home}:${m.result.pen_away}`}
-          </div>
+          {m.result.result_status !== "LIVE" && (
+            <div className="faint mono mt-8" style={{ fontSize: 12 }}>
+              {m.result.result_status === "AET" ? "после доп. времени" : m.result.result_status === "PEN" ? "по пенальти" : "основное время"}
+              {m.result.pen_home != null && ` · серия ${m.result.pen_home}:${m.result.pen_away}`}
+            </div>
+          )}
         </div>
       )}
 
@@ -68,18 +74,26 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       )}
       {reveal && (
         <div className="card mt-12">
-          {reveal.bets.map((b) => (
-            <div key={b.participant_id} className="lb-row" style={{ gridTemplateColumns: "1fr auto auto", gap: 10 }}>
-              <span className="lb-name">{b.display_name}</span>
-              <span className="mono" style={{ fontSize: 16, color: b.pred_home == null ? "var(--ink-faint)" : "var(--ink)" }}>
-                {b.pred_home == null ? "—" : `${b.pred_home}:${b.pred_away}`}
-                {b.x2 && <span style={{ color: "var(--gold)" }}> ×2</span>}
-              </span>
-              <span className="lb-pts" style={{ fontSize: 18, minWidth: 34, textAlign: "right" }}>
-                {b.points_earned == null ? "·" : b.points_earned}
-              </span>
-            </div>
-          ))}
+          {reveal.bets.map((b) => {
+            const exact =
+              m.result != null &&
+              b.pred_home != null &&
+              b.pred_home === m.result.toto_home &&
+              b.pred_away === m.result.toto_away;
+            const cls = b.points_earned == null ? "" : pointsClass(b.points_earned, { exact, x2: b.x2 });
+            return (
+              <div key={b.participant_id} className="lb-row" style={{ gridTemplateColumns: "1fr auto auto", gap: 10 }}>
+                <span className="lb-name">{b.display_name}</span>
+                <span className={`mono ${exact ? "pts-exact" : ""}`} style={{ fontSize: 16, color: b.pred_home == null ? "var(--ink-faint)" : undefined }}>
+                  {b.pred_home == null ? "—" : `${b.pred_home}:${b.pred_away}`}
+                  {b.x2 && <span style={{ color: "var(--gold)" }}> ×2</span>}
+                </span>
+                <span className={`lb-pts ${cls}`} style={{ fontSize: 18, minWidth: 34, textAlign: "right" }}>
+                  {b.points_earned == null ? "·" : fmtPts(b.points_earned)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

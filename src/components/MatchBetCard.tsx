@@ -7,6 +7,7 @@ import { countdown, fmtMsk } from "@/lib/client/format";
 import { useToast } from "./Toast";
 import { StageBadge, Countdown, slotLabel } from "./ui";
 import { flag } from "@/lib/client/flags";
+import { pointsClass, fmtPts } from "@/lib/client/points";
 import type { ApiMatch, MyBet, ApiTeam } from "@/lib/client/types";
 
 const clampScore = (s: string) => Math.max(0, Math.min(20, parseInt(s.replace(/\D/g, ""), 10) || 0));
@@ -121,6 +122,16 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
 
   const notOpen = match.deadline_at === null;
   const locked = notOpen || countdown(match.deadline_at, now).locked;
+  const res = match.result;
+  const finished = !!res && ["FT", "AET", "PEN"].includes(res.result_status);
+  const liveScore = res?.result_status === "LIVE" ? res : null;
+  const kickoffPassed = match.kickoff_at != null && now >= new Date(match.kickoff_at).getTime();
+  const inPlay = !notOpen && kickoffPassed && !finished && match.status !== "CANCELLED";
+  // Once a score exists (live or final) the big digits show IT, not the bet —
+  // the bet moves to a chip below with the points earned.
+  const showScore = finished || liveScore != null;
+  const scoreH = showScore ? (res!.toto_home ?? 0) : h;
+  const scoreA = showScore ? (res!.toto_away ?? 0) : a;
   const isDraw = h === a;
   const needsPen = match.x2_allowed && isDraw;
   const hasBet = !!myBet;
@@ -175,19 +186,28 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
         {notOpen && <span className="chip chip-locked">Ждём участников</span>}
       </div>
 
-      {/* Two distinct countdowns: when betting closes (deadline, −3h) and when
-          the match actually starts. Different colours so they're never confused. */}
+      {/* Status row. Before kickoff: two countdowns (betting deadline −3h, then
+          kickoff) in different colours. During the match: one live chip (with
+          the live score once the provider publishes it). After: «Завершён». */}
       {!notOpen && (
         <div className="cd-row mt-12">
-          <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
-          <Countdown target={match.kickoff_at} label="До матча" tone="kickoff" lockedLabel="Матч идёт" />
+          {finished ? (
+            <span className="chip chip-open">✓ Завершён{res!.result_status !== "FT" ? ` · ${res!.result_status === "PEN" ? "по пенальти" : "в доп. время"}` : ""}</span>
+          ) : inPlay ? (
+            <span className="chip chip-live"><span className="dot" /> Матч идёт{liveScore ? ` · ${liveScore.toto_home}:${liveScore.toto_away}` : ""}</span>
+          ) : (
+            <>
+              <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
+              <Countdown target={match.kickoff_at} label="До матча" tone="kickoff" lockedLabel="Матч идёт" />
+            </>
+          )}
         </div>
       )}
 
       <div className="scoreboard mt-16">
-        <ScoreField team={match.home_team} projected={match.projected_home} slot={match.home_slot} value={h} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />
+        <ScoreField team={match.home_team} projected={match.projected_home} slot={match.home_slot} value={showEditor ? h : scoreH} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />
         <span className="score-colon">:</span>
-        <ScoreField team={match.away_team} projected={match.projected_away} slot={match.away_slot} value={a} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
+        <ScoreField team={match.away_team} projected={match.projected_away} slot={match.away_slot} value={showEditor ? a : scoreA} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
       </div>
 
       {showEditor && needsPen && (
@@ -238,7 +258,19 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
         )}
 
         {locked ? (
-          <span className="chip chip-locked">{hasBet ? `Ставка: ${init.h}:${init.a}` : "Без ставки"}</span>
+          <span className="row gap-6">
+            <span className="chip chip-locked">{hasBet ? `Моя ставка ${init.h}:${init.a}` : "Без ставки"}</span>
+            {finished && hasBet && myBet?.points != null && (
+              <span
+                className={`chip ${pointsClass(myBet.points, {
+                  exact: myBet.pred_home === res!.toto_home && myBet.pred_away === res!.toto_away,
+                  x2: myBet.x2,
+                })}`}
+              >
+                {fmtPts(myBet.points)} очк.
+              </span>
+            )}
+          </span>
         ) : showEditor ? (
           <div className="row gap-8">
             {hasBet && (

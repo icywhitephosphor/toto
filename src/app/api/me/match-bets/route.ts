@@ -9,7 +9,7 @@ import { route, ok, AppError, parseJson, clientMeta } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { requireParticipant } from "@/lib/auth";
 import { db } from "@/db";
-import { matches, matchBets, idempotencyKeys } from "@/db/schema";
+import { matches, matchBets, idempotencyKeys, scoreEvents } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
 import { derivePlayoffBet } from "@/scoring";
 
@@ -18,18 +18,26 @@ export const GET = route(async (req) => {
   enforceRateLimit(req, "me", ctx.user.id);
 
   const rows = await db
-    .select()
+    .select({
+      bet: matchBets,
+      points: scoreEvents.points, // null until the match result is usable
+    })
     .from(matchBets)
+    .leftJoin(
+      scoreEvents,
+      and(eq(scoreEvents.participantId, matchBets.participantId), eq(scoreEvents.matchId, matchBets.matchId)),
+    )
     .where(eq(matchBets.participantId, ctx.participant.id));
 
   return ok({
-    bets: rows.map((b) => ({
+    bets: rows.map(({ bet: b, points }) => ({
       match_id: b.matchId,
       pred_home: b.predHome,
       pred_away: b.predAway,
       x2: b.x2,
       pen_winner: b.penWinner,
       version: b.version,
+      points,
       updated_at: b.updatedAt.toISOString(),
     })),
   });

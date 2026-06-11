@@ -169,10 +169,11 @@ if (feedConfigured) {
         log(`fd sync failed: ${out.error ?? `HTTP ${out.httpStatus}`}`);
         next = out.httpStatus === 429 ? 70_000 : 60_000;
       } else {
-        if (out.fixturesUpdated || out.resultsApplied || out.unmatched) {
-          log(`fd sync: fixtures=${out.fixturesUpdated} results=${out.resultsApplied} unmatched=${out.unmatched}`);
+        if (out.fixturesUpdated || out.resultsApplied || out.liveUpdated || out.unmatched) {
+          log(`fd sync: fixtures=${out.fixturesUpdated} results=${out.resultsApplied} live=${out.liveUpdated} unmatched=${out.unmatched}`);
         }
         if (out.liveNow) next = LIVE_MS;
+        else if (out.awaitingScore > 0) next = 60_000; // finished, score pending — hammer
         else if (out.msToNextKickoff != null) {
           next = Math.min(IDLE_MS, Math.max(LIVE_MS, out.msToNextKickoff - 60_000));
         }

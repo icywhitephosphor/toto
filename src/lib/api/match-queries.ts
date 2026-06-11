@@ -40,10 +40,11 @@ function serialize(r: Row) {
         }
       : null;
 
-  // Hide unconfirmed/non-final result detail from the public match shape: only
-  // expose the result once it is FT/AET/PEN (08). LIVE/AWAITING stays null here.
+  // Expose final results (FT/AET/PEN) and the LIVE in-play score (display
+  // only — scoring counts nothing but finals). AWAITING_CONFIRM play-off
+  // results stay hidden until the admin confirms them.
   const publicResult =
-    result && ["FT", "AET", "PEN"].includes(result.result_status) ? result : null;
+    result && ["FT", "AET", "PEN", "LIVE"].includes(result.result_status) ? result : null;
 
   return {
     id: r.id,
