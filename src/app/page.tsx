@@ -5,6 +5,7 @@ import { useBootstrap } from "@/lib/client/bootstrap";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ClaimScreen } from "@/components/ClaimScreen";
 import { Countdown } from "@/components/ui";
+import { MatchCalendar } from "@/components/MatchCalendar";
 import { IconChevron, IconBonus, IconMatches, IconTable } from "@/components/icons";
 import { fmtRub } from "@/lib/client/format";
 import type { Leaderboard } from "@/lib/client/types";
@@ -77,6 +78,15 @@ function Hub() {
         </Link>
       </div>
 
+      {/* Game-day calendar */}
+      <div className="mt-24">
+        <div className="row between" style={{ marginBottom: 10 }}>
+          <h2 className="section-title" style={{ fontSize: 18 }}>Календарь</h2>
+          <Link href="/matches" className="chip chip-open">все матчи</Link>
+        </div>
+        <MatchCalendar />
+      </div>
+
       {/* Your standing */}
       <div className="card card-pad mt-16">
         <div className="row between">
@@ -106,19 +116,19 @@ function Hub() {
           <div className="card-pad" style={{ paddingBottom: 4 }}>
             <div className="eyebrow">Лидеры</div>
           </div>
-          {top3.map((r) => (
-            <div key={r.participant_id} className={`lb-row p${r.place} ${r.participant_id === me?.id ? "me" : ""}`}>
-              <span className="lb-place">{r.place}</span>
-              <span className="lb-name">{r.display_name}</span>
-              <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>
-            </div>
-          ))}
+          {top3.map((r) => {
+            const scored = r.total_points > 0;
+            const medal = scored && r.place <= 3 ? ["🥇", "🥈", "🥉"][r.place - 1] : null;
+            return (
+              <div key={r.participant_id} className={`lb-row ${scored ? `p${r.place}` : ""} ${r.participant_id === me?.id ? "me" : ""}`}>
+                <span className="lb-place">{medal ?? r.place}</span>
+                <span className="lb-name">{r.display_name}</span>
+                <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <div className="faint center mt-24" style={{ fontSize: 11 }}>
-        Источник истины — сервер. Дедлайны и секретность ставок проверяются на бэкенде.
-      </div>
     </div>
   );
 }

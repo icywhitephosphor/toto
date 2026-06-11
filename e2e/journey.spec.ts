@@ -51,7 +51,7 @@ test("server hides others' bets before the deadline (fairness)", async ({ page }
   const matchId = await firstGroupMatchId(page.request);
 
   await page.goto(`/match/${matchId}`);
-  await expect(page.getByText(/скрыт/i)).toBeVisible(); // "Прогнозы скрыты до дедлайна"
+  await expect(page.getByText(/откроются после дедлайна/i)).toBeVisible();
 });
 
 test("admin enters a result → leaderboard reflects points", async ({ page, request }) => {

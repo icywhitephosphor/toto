@@ -270,6 +270,7 @@ button { font: inherit; color: inherit; }
 .lb-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); transition: background 0.2s; }
 .lb-row:last-child { border-bottom: none; }
 .lb-row.me { background: var(--pitch-faint); }
+.lb-row.prize { box-shadow: inset 3px 0 0 var(--gold); }
 .lb-place { font-family: var(--font-display); font-size: 22px; color: var(--ink-faint); text-align: center; }
 .lb-row.p1 .lb-place { color: var(--gold); }
 .lb-row.p2 .lb-place { color: var(--ink-dim); }
@@ -278,6 +279,57 @@ button { font: inherit; color: inherit; }
 .lb-sub { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 3px; }
 .lb-pts { font-family: var(--font-display); font-size: 26px; color: var(--pitch); font-variant-numeric: tabular-nums; }
 .lb-pts.zero { color: var(--ink-faint); }
+
+/* ---- Prize fund -----------------------------------------------------------*/
+.prize-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.prize-row:last-child { border-bottom: none; }
+.prize-medal { font-size: 20px; text-align: center; font-family: var(--font-display); color: var(--ink-faint); }
+
+/* ---- Game-day calendar strip ----------------------------------------------*/
+.daystrip { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.daystrip::-webkit-scrollbar { display: none; }
+.daychip {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 54px; padding: 8px 10px 7px; border-radius: 16px;
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+  scroll-snap-align: center; transition: border-color 0.15s, background 0.15s;
+}
+.daychip .dow { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); }
+.daychip .dnum { font-family: var(--font-display); font-size: 21px; line-height: 1.1; color: var(--ink); }
+.daychip .dmon { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
+.daychip.today .dow { color: var(--coral); }
+.daychip.active { border-color: var(--pitch); background: var(--pitch-soft); }
+.daychip.active .dnum { color: var(--pitch); }
+.daychip:active { transform: translateY(1px); }
+
+/* ---- Playoff bracket (horizontal, Flashscore-style) ------------------------*/
+.bracket { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 10px; scrollbar-width: none; }
+.bracket::-webkit-scrollbar { display: none; }
+.bk-col { flex: 0 0 86%; scroll-snap-align: center; display: flex; flex-direction: column; gap: 10px; }
+.bk-tile { display: block; background: var(--card-bg); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; box-shadow: var(--shadow); }
+.bk-tile:active { transform: translateY(1px); }
+.bk-team { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 4px 0; }
+.bk-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.bk-name.tbd { color: var(--ink-faint); font-weight: 500; font-size: 12.5px; }
+.bk-name.proj { color: var(--ink-dim); }
+.bk-score { font-family: var(--font-display); font-size: 18px; min-width: 18px; text-align: right; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.bk-team.win .bk-name, .bk-team.win .bk-score { color: var(--pitch); }
+.bk-meta { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); }
+
+/* TBD slot / projected team in the score card */
+.score-team .tname.slot { color: var(--ink-faint); font-weight: 500; font-size: 12px; white-space: normal; text-align: center; line-height: 1.25; }
+.score-team.proj .tname { color: var(--ink-dim); }
+
+/* ---- Back link ------------------------------------------------------------*/
+.backlink {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px 8px 10px; margin-bottom: 4px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--surface-2);
+  color: var(--ink-dim); font-size: 13px; font-weight: 600;
+  transition: color 0.15s, background 0.15s;
+}
+.backlink:active { transform: translateY(1px); }
+.backlink:hover { color: var(--ink); }
 
 /* ---- Misc -----------------------------------------------------------------*/
 .stack { display: flex; flex-direction: column; }

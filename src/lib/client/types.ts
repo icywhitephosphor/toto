@@ -81,6 +81,9 @@ export interface ApiMatch {
   status: string;
   x2_allowed: boolean;
   result: ApiResult | null;
+  /** Who currently holds an unresolved knockout slot (live group tables). */
+  projected_home?: ApiTeam | null;
+  projected_away?: ApiTeam | null;
 }
 
 export interface MyBet {

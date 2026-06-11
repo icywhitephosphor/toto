@@ -4,7 +4,7 @@ import { api, ApiError, uuid } from "@/lib/client/api";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown, fmtMsk } from "@/lib/client/format";
 import { useToast } from "./Toast";
-import { StageBadge, Countdown } from "./ui";
+import { StageBadge, Countdown, slotLabel } from "./ui";
 import { flag } from "@/lib/client/flags";
 import type { ApiMatch, MyBet, ApiTeam } from "@/lib/client/types";
 
@@ -40,6 +40,7 @@ function Stepper({ value, set, disabled }: { value: number; set: (n: number) => 
 // phone keypad) plus a small +/- nudge when editable; otherwise a static digit.
 function ScoreField({
   team,
+  projected,
   slot,
   value,
   set,
@@ -48,6 +49,7 @@ function ScoreField({
   notOpen,
 }: {
   team: ApiTeam | null;
+  projected?: ApiTeam | null;
   slot: string | null;
   value: number;
   set: (n: number) => void;
@@ -57,10 +59,22 @@ function ScoreField({
 }) {
   return (
     <div className="score-cell">
-      <span className="score-team">
-        <span className="tflag">{team ? flag(team.code) : "🏳️"}</span>
-        <span className="tname">{team?.name_ru ?? slot ?? "TBD"}</span>
-      </span>
+      {team ? (
+        <span className="score-team">
+          <span className="tflag">{flag(team.code)}</span>
+          <span className="tname">{team.name_ru}</span>
+        </span>
+      ) : projected ? (
+        // The slot is not decided yet — show who holds it per the live tables.
+        <span className="score-team proj">
+          <span className="tflag">{flag(projected.code)}</span>
+          <span className="tname">≈ {projected.name_ru}</span>
+        </span>
+      ) : (
+        <span className="score-team">
+          <span className="tname slot">{slotLabel(slot) ?? "Уточняется"}</span>
+        </span>
+      )}
       {editable ? (
         <input
           className="score-input"
@@ -155,27 +169,38 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
       <div className="row between gap-8">
         <div className="row gap-8">
           <StageBadge stage={match.stage} group={match.group_code} />
-          <span className="chip faint mono">{fmtMsk(match.kickoff_at)}</span>
+          {match.kickoff_at && <span className="chip faint mono">{fmtMsk(match.kickoff_at)}</span>}
         </div>
-        {notOpen ? <span className="chip chip-locked">Жеребьёвка</span> : <Countdown target={match.deadline_at} />}
+        {notOpen ? <span className="chip chip-locked">Ждём участников</span> : <Countdown target={match.deadline_at} />}
       </div>
 
       <div className="scoreboard mt-16">
-        <ScoreField team={match.home_team} slot={match.home_slot} value={h} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />
+        <ScoreField team={match.home_team} projected={match.projected_home} slot={match.home_slot} value={h} set={setH} saving={saving} editable={showEditor} notOpen={notOpen} />
         <span className="score-colon">:</span>
-        <ScoreField team={match.away_team} slot={match.away_slot} value={a} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
+        <ScoreField team={match.away_team} projected={match.projected_away} slot={match.away_slot} value={a} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
       </div>
 
       {showEditor && needsPen && (
         <div className="mt-12 stack gap-6">
           <div className="eyebrow">Ничья — кто проходит по пенальти?</div>
           <div className="segmented">
-            <button className={`seg ${pen === "HOME" ? "active" : ""}`} onClick={() => setPen("HOME")}>{match.home_team?.name_ru ?? "Хозяева"}</button>
-            <button className={`seg ${pen === "AWAY" ? "active" : ""}`} onClick={() => setPen("AWAY")}>{match.away_team?.name_ru ?? "Гости"}</button>
+            <button className={`seg ${pen === "HOME" ? "active" : ""}`} onClick={() => setPen("HOME")}>
+              {match.home_team ? `${flag(match.home_team.code)} ${match.home_team.name_ru}` : "Хозяева"}
+            </button>
+            <button className={`seg ${pen === "AWAY" ? "active" : ""}`} onClick={() => setPen("AWAY")}>
+              {match.away_team ? `${flag(match.away_team.code)} ${match.away_team.name_ru}` : "Гости"}
+            </button>
           </div>
         </div>
       )}
 
+      {notOpen ? (
+        <div className="row mt-16" style={{ justifyContent: "center" }}>
+          <span className="faint" style={{ fontSize: 12 }}>
+            Ставки откроются, когда определятся участники
+          </span>
+        </div>
+      ) : (
       <div className="row between mt-16 gap-12" style={{ minHeight: 38 }}>
         {showEditor && match.x2_allowed ? (
           <button type="button" className={`x2 ${x2 ? "on" : ""}`} onClick={() => setX2((v) => !v)} aria-pressed={x2}>
@@ -189,7 +214,10 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
             {myBet!.x2 && <span className="chip">×2</span>}
             {init.pen && (
               <span className="chip">
-                Пен.: {init.pen === "HOME" ? (match.home_team?.name_ru ?? "Хозяева") : (match.away_team?.name_ru ?? "Гости")}
+                Пен.:{" "}
+                {init.pen === "HOME"
+                  ? (match.home_team ? `${flag(match.home_team.code)} ${match.home_team.name_ru}` : "Хозяева")
+                  : (match.away_team ? `${flag(match.away_team.code)} ${match.away_team.name_ru}` : "Гости")}
               </span>
             )}
           </span>
@@ -218,6 +246,7 @@ export function MatchBetCard({ match, myBet, onSaved }: { match: ApiMatch; myBet
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }

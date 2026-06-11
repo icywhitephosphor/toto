@@ -24,10 +24,37 @@ const dayKey = new Intl.DateTimeFormat("ru-RU", {
   month: "long",
 });
 
+// Calendar day strip: stable MSK date key ("2026-06-11") + chip label parts.
+const isoDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Moscow",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const dowOnly = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", weekday: "short" });
+const dayNumOnly = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric" });
+const monthOnly = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", month: "short" });
+
 export const fmtMsk = (iso: string | null) => (iso ? dt.format(new Date(iso)).replace(",", "") : "—");
 export const fmtDateMsk = (iso: string | null) => (iso ? dateOnly.format(new Date(iso)) : "—");
 export const fmtTimeMsk = (iso: string | null) => (iso ? timeOnly.format(new Date(iso)) : "—");
 export const fmtDayKey = (iso: string | null) => (iso ? dayKey.format(new Date(iso)) : "—");
+export const mskDateKey = (iso: string) => isoDay.format(new Date(iso));
+export const todayMskKey = () => isoDay.format(new Date());
+export const fmtDow = (iso: string) => dowOnly.format(new Date(iso));
+export const fmtDayNum = (iso: string) => dayNumOnly.format(new Date(iso));
+export const fmtMonthShort = (iso: string) => monthOnly.format(new Date(iso)).replace(".", "");
+
+/** Russian plural: plural(23, "участник", "участника", "участников") → "23 участника". */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11 ? one
+    : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? few
+    : many;
+  return `${n} ${word}`;
+}
 
 export interface CountdownState {
   locked: boolean;

@@ -1,10 +1,11 @@
 "use client";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { useServerClock } from "@/lib/client/hooks";
 import { countdown } from "@/lib/client/format";
 import type { ApiTeam, Stage } from "@/lib/client/types";
 import { flag } from "@/lib/client/flags";
-import { IconLock } from "./icons";
+import { IconChevron, IconLock } from "./icons";
 
 export const STAGE_LABEL: Record<Stage, string> = {
   GROUP: "Группа",
@@ -22,20 +23,21 @@ export function StageBadge({ stage, group }: { stage: Stage; group?: string | nu
 }
 
 export function TeamPill({ team, slot, align = "left", size }: { team: ApiTeam | null; slot?: string | null; align?: "left" | "right"; size?: "sm" }) {
-  const name = team?.name_ru ?? slotLabel(slot) ?? "TBD";
+  const name = team?.name_ru ?? slotLabel(slot) ?? "Уточняется";
   return (
     <span className="team" style={{ flexDirection: align === "right" ? "row-reverse" : "row", justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
-      <span className="tflag">{team ? flag(team.code) : "🏳️"}</span>
+      {team && <span className="tflag">{flag(team.code)}</span>}
       <span className={`tname ${size === "sm" ? "sm" : ""}`}>{name}</span>
     </span>
   );
 }
 
-function slotLabel(slot?: string | null): string | null {
+/** Human label for an unresolved bracket slot ('W-A', 'RU-B', '3RD:…', 'W73'). */
+export function slotLabel(slot?: string | null): string | null {
   if (!slot) return null;
-  if (slot.startsWith("W-")) return `Победитель ${slot.slice(2)}`;
-  if (slot.startsWith("RU-")) return `2-е место ${slot.slice(3)}`;
-  if (slot.startsWith("3RD:")) return `3-е место`;
+  if (slot.startsWith("W-")) return `1-е группы ${slot.slice(2)}`;
+  if (slot.startsWith("RU-")) return `2-е группы ${slot.slice(3)}`;
+  if (slot.startsWith("3RD:")) return `3-е из ${slot.slice(4)}`;
   if (/^W\d+$/.test(slot)) return `Победитель м.${slot.slice(1)}`;
   if (/^L\d+$/.test(slot)) return `Проигравший м.${slot.slice(1)}`;
   return slot;
@@ -78,14 +80,25 @@ export function CardSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
-export function PageHead({ eyebrow, title, right }: { eyebrow: string; title: string; right?: ReactNode }) {
+export function PageHead({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: ReactNode }) {
   return (
     <div className="row between mt-8" style={{ alignItems: "flex-end", marginBottom: 14 }}>
       <div>
-        <div className="eyebrow">{eyebrow}</div>
+        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1 className="h-display" style={{ fontSize: 34, marginTop: 4 }}>{title}</h1>
       </div>
       {right}
     </div>
+  );
+}
+
+/* Deterministic in-app back navigation for drill-in pages (Mini App users also
+   get the native Telegram back button via <TelegramBack/>). */
+export function BackLink({ href, label = "Назад" }: { href: string; label?: string }) {
+  return (
+    <Link href={href} className="backlink">
+      <IconChevron width={15} height={15} style={{ transform: "rotate(180deg)" }} />
+      {label}
+    </Link>
   );
 }

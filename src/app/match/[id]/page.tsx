@@ -1,10 +1,9 @@
 "use client";
 import { use } from "react";
-import Link from "next/link";
 import useSWR from "swr";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { MatchBetCard } from "@/components/MatchBetCard";
-import { TeamPill, StageBadge, Empty, CardSkeleton } from "@/components/ui";
+import { TeamPill, StageBadge, Empty, CardSkeleton, BackLink } from "@/components/ui";
 import { fmtMsk } from "@/lib/client/format";
 import { ApiError } from "@/lib/client/api";
 import type { ApiMatch, MyBet } from "@/lib/client/types";
@@ -30,7 +29,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="rise" style={{ paddingTop: 8 }}>
-      <Link href="/matches" className="chip" style={{ marginBottom: 12 }}>← к матчам</Link>
+      <BackLink href="/matches" label="К матчам" />
 
       <div className="row gap-8 mt-8">
         <StageBadge stage={m.stage} group={m.group_code} />
@@ -64,7 +63,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       <h2 className="section-title mt-24" style={{ fontSize: 18 }}>Прогнозы участников</h2>
       {revealLocked && (
         <div className="banner warn mt-12">
-          Прогнозы скрыты до дедлайна ({fmtMsk(m.deadline_at)} МСК). Это ключевое правило честности.
+          Прогнозы участников откроются после дедлайна — {fmtMsk(m.deadline_at)} МСК.
         </div>
       )}
       {reveal && (

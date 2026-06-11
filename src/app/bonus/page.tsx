@@ -53,16 +53,19 @@ export default function BonusPage() {
   return (
     <div>
       <PageHead
-        eyebrow="7 категорий · разовый дедлайн"
         title="Бонусы"
         right={locked ? <span className="chip chip-locked">Закрыто</span> : <Countdown target={boot.deadlines.bonus_deadline_at} />}
       />
 
       {locked ? (
-        <div className="banner warn">
-          Приём бонусов закрыт (10 июня, 23:00 МСК). Прогнозы зафиксированы и раскрыты для всех.{" "}
-          <Link href="/reveal/bonus" style={{ color: "var(--coral)", textDecoration: "underline" }}>Посмотреть все</Link>
-        </div>
+        <>
+          <div className="banner warn">
+            Приём бонусов закрыт (10 июня, 23:00 МСК). Прогнозы зафиксированы и раскрыты для всех.
+          </div>
+          <Link href="/reveal/bonus" className="btn btn-gold btn-block mt-12">
+            Посмотреть ставки всех участников
+          </Link>
+        </>
       ) : (
         <div className="banner">
           Выберите команды в каждой категории. Дубликаты внутри категории запрещены, нужно ровно нужное

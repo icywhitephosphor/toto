@@ -5,6 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { matches, teams, matchResults } from "@/db/schema";
 import { TOURNAMENT_ID } from "@/lib/env";
+import { computeGroupTables, projectSlot, type GroupGame, type SlotContext } from "@/domain/groupTables";
 
 const homeTeam = alias(teams, "home_team");
 const awayTeam = alias(teams, "away_team");
@@ -60,10 +61,65 @@ function serialize(r: Row) {
     status: r.status,
     x2_allowed: r.x2Allowed,
     result: publicResult,
+    // Filled by attachProjections() for knockout matches whose teams are not
+    // resolved yet: who currently holds the slot per the live group tables.
+    projected_home: null as TeamShapeOut,
+    projected_away: null as TeamShapeOut,
   };
 }
 
+type TeamShapeOut = ReturnType<typeof teamShape>;
+
 export type SerializedMatch = ReturnType<typeof serialize>;
+
+/** Slot projections from public results only — same visibility as the UI. */
+function attachProjections(list: SerializedMatch[], all: SerializedMatch[]): SerializedMatch[] {
+  const teamsByGroup = new Map<string, string[]>();
+  const teamById = new Map<string, NonNullable<TeamShapeOut>>();
+  const games: GroupGame[] = [];
+  const winnerByMatchNo = new Map<number, string>();
+  const loserByMatchNo = new Map<number, string>();
+
+  for (const m of all) {
+    for (const t of [m.home_team, m.away_team]) if (t) teamById.set(t.id, t);
+    if (m.stage === "GROUP" && m.group_code) {
+      for (const t of [m.home_team, m.away_team]) {
+        if (!t) continue;
+        if (!teamsByGroup.has(m.group_code)) teamsByGroup.set(m.group_code, []);
+        const arr = teamsByGroup.get(m.group_code)!;
+        if (!arr.includes(t.id)) arr.push(t.id);
+      }
+      if (m.result?.toto_home != null && m.result.toto_away != null && m.home_team && m.away_team) {
+        games.push({
+          groupCode: m.group_code,
+          homeTeamId: m.home_team.id,
+          awayTeamId: m.away_team.id,
+          homeGoals: m.result.toto_home,
+          awayGoals: m.result.toto_away,
+        });
+      }
+    } else if (m.result?.winner_team_id && m.home_team && m.away_team) {
+      winnerByMatchNo.set(m.fifa_match_no, m.result.winner_team_id);
+      loserByMatchNo.set(
+        m.fifa_match_no,
+        m.result.winner_team_id === m.home_team.id ? m.away_team.id : m.home_team.id,
+      );
+    }
+  }
+
+  const ctx: SlotContext = { tables: computeGroupTables(games, teamsByGroup), winnerByMatchNo, loserByMatchNo };
+
+  return list.map((m) => {
+    if (m.stage === "GROUP" || (m.home_team && m.away_team)) return m;
+    const homeId = m.home_team ? null : projectSlot(m.home_slot, ctx);
+    const awayId = m.away_team ? null : projectSlot(m.away_slot, ctx);
+    return {
+      ...m,
+      projected_home: homeId ? (teamById.get(homeId) ?? null) : null,
+      projected_away: awayId ? (teamById.get(awayId) ?? null) : null,
+    };
+  });
+}
 
 async function runQuery(where: SQL | undefined) {
   return db
@@ -122,11 +178,17 @@ export async function listMatches(filters: MatchFilters = {}): Promise<Serialize
   if (filters.status) conds.push(eq(matches.status, filters.status));
   if (filters.from) conds.push(gte(matches.kickoffAt, filters.from));
   if (filters.to) conds.push(lte(matches.kickoffAt, filters.to));
+  const filtered = conds.length > 1;
   const rows = await runQuery(and(...conds));
-  return rows.map(serialize);
+  const serialized = rows.map(serialize);
+  // Projections need the full tournament picture (group tables + finished
+  // knockout matches); the common unfiltered call already has it.
+  const all = filtered ? (await runQuery(eq(matches.tournamentId, TOURNAMENT_ID))).map(serialize) : serialized;
+  return attachProjections(serialized, all);
 }
 
 export async function getMatchById(id: string): Promise<SerializedMatch | null> {
-  const rows = await runQuery(and(eq(matches.tournamentId, TOURNAMENT_ID), eq(matches.id, id)));
-  return rows[0] ? serialize(rows[0]) : null;
+  const all = (await runQuery(eq(matches.tournamentId, TOURNAMENT_ID))).map(serialize);
+  const one = all.find((m) => m.id === id);
+  return one ? attachProjections([one], all)[0] : null;
 }

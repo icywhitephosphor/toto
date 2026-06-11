@@ -57,7 +57,7 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [teams]);
 
-  const teamName = (id: string) => teams.find((t) => t.id === id)?.name_ru ?? "?";
+  const teamOf = (id: string) => teams.find((t) => t.id === id);
 
   // "Победители групп": exactly one winner per group — selecting another team in
   // the same group replaces the previous pick (radio-per-group behaviour).
@@ -136,7 +136,12 @@ export function BonusCategoryCard({ meta, teams, initialTeamIds, initialPlayer, 
         <div className="card-pad" style={{ paddingTop: 0 }}>
           <div className="row wrap gap-6">
             {isTeam
-              ? [...selected].map((id) => <span key={id} className="chip">{teamName(id)}</span>)
+              ? [...selected].map((id) => (
+                  <span key={id} className="chip">
+                    <span className="tflag" style={{ fontSize: 14 }}>{flag(teamOf(id)?.code)}</span>
+                    {teamOf(id)?.name_ru ?? "?"}
+                  </span>
+                ))
               : player
                 ? <span className="chip">{player}</span>
                 : <span className="faint" style={{ fontSize: 13 }}>не заполнено</span>}

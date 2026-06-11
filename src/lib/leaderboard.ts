@@ -47,8 +47,12 @@ export function buildLeaderboardRows(
   bonusByParticipant: Map<string, Map<string, number>>,
   settledCategories: Set<string>,
 ): LeaderboardRow[] {
+  // Within a tie group (same place) order alphabetically — before any results
+  // land everyone is tied, and an id-ordered list reads as random to users.
   const sorted = [...standings].sort((a, b) =>
-    compareStandings(toStanding(a), toStanding(b)),
+    tiedForPlace(a, b)
+      ? a.displayName.localeCompare(b.displayName, "ru")
+      : compareStandings(toStanding(a), toStanding(b)),
   );
 
   const rows: LeaderboardRow[] = [];
