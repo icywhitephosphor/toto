@@ -15,6 +15,7 @@ import { db } from "@/db";
 import { matches, matchResults, teams, providerSyncLog } from "@/db/schema";
 import { TOURNAMENT_ID } from "@/lib/env";
 import { recomputeAll } from "@/lib/recompute";
+import { exportSheetsInBackground } from "@/lib/sheets";
 import { totoScore } from "@/scoring";
 import {
   fetchWcMatches,
@@ -59,6 +60,7 @@ async function loadLocal() {
       resultStatus: matchResults.resultStatus,
       resultSource: matchResults.source,
       resultConfirmed: matchResults.confirmed,
+      resultUpdatedBy: matchResults.updatedBy,
       resultBaseHome: matchResults.baseHome,
       resultBaseAway: matchResults.baseAway,
       resultPenHome: matchResults.penHome,
@@ -88,8 +90,12 @@ function findLocal(fd: FdMatch, ctx: {
     const found = ctx.byPair.get(`${stage}|${pairKey(h, a)}`);
     if (found) return found;
   }
-  // Knockout fixture whose teams are not resolved yet: kickoff datetime is
-  // unique per stage in the official calendar.
+  // Time fallback ONLY for a still-undrawn knockout fixture (FD hasn't named
+  // the teams either). byStageTime contains only unresolved, unlinked local
+  // matches, so two pairs sharing a kickoff give >1 candidate → we bail rather
+  // than risk linking the wrong fixture. Once linked, the provider id is stable
+  // and this heuristic never runs for that match again.
+  if (h || a) return null;
   const candidates = ctx.byStageTime.get(`${stage}|${new Date(fd.utcDate).getTime()}`) ?? [];
   return candidates.length === 1 ? candidates[0] : null;
 }
@@ -120,7 +126,10 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
     for (const m of local) {
       if (m.providerMatchId) byProviderId.set(m.providerMatchId, m);
       if (m.homeCode && m.awayCode) byPair.set(`${m.stage}|${pairKey(m.homeCode, m.awayCode)}`, m);
-      if (m.kickoffAt) {
+      // Time index holds ONLY unresolved, unlinked fixtures — a match that is
+      // already linked or has both teams must never be reachable via the time
+      // heuristic (see findLocal).
+      if (m.kickoffAt && !m.providerMatchId && !(m.homeCode && m.awayCode)) {
         const k = `${m.stage}|${m.kickoffAt.getTime()}`;
         if (!byStageTime.has(k)) byStageTime.set(k, []);
         byStageTime.get(k)!.push(m);
@@ -150,6 +159,11 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       const m = findLocal(fd, { byProviderId, byPair, byStageTime });
       if (!m) {
         outcome.unmatched += 1;
+        // A FINISHED match we can't map usually means an unknown FD team code
+        // (alias gap) — log its identity so it can be fixed quickly.
+        if (fd.status === "FINISHED") {
+          log(`unmatched FINISHED: ${fd.stage} ${fd.homeTeam.tla ?? "?"}-${fd.awayTeam.tla ?? "?"} @ ${fd.utcDate} (fd#${fd.id})`);
+        }
         continue;
       }
 
@@ -175,12 +189,41 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       }
 
       // --- result ingest ---------------------------------------------------
+      // Orientation: detect a swap from EITHER known side, not just home, so a
+      // fixture we know only by one team is still oriented correctly.
       const fdHome = fdCode(fd.homeTeam.tla);
-      const swapped = !!(fdHome && m.homeCode && fdHome !== m.homeCode);
+      const fdAway = fdCode(fd.awayTeam.tla);
+      const swapped =
+        (m.homeCode != null && fdHome != null && fdHome !== m.homeCode) ||
+        (m.awayCode != null && fdAway != null && fdAway !== m.awayCode);
       const mapped = mapFinishedScore(fd, swapped);
-      if (!mapped || !teamsKnown) continue;
+      if (!mapped) {
+        // FINISHED but unmappable (e.g. PENALTY_SHOOTOUT with an incomplete
+        // payload) — surface it so the admin can enter the result by hand
+        // instead of it silently never arriving.
+        if (fd.status === "FINISHED") {
+          log(`result map failed: №${m.fifaMatchNo} ${fd.score.duration} — enter manually if it persists`);
+        }
+        continue;
+      }
+      if (!teamsKnown) continue;
+      // Sanity: when both our teams are known, FD's pair must equal ours in one
+      // of the two orientations. If not, findLocal matched the wrong fixture —
+      // refuse to write a result rather than score the wrong match.
+      if (fdHome && fdAway) {
+        const ours = new Set([m.homeCode, m.awayCode]);
+        if (!ours.has(fdHome) || !ours.has(fdAway)) {
+          log(`orientation mismatch: №${m.fifaMatchNo} ours ${m.homeCode}-${m.awayCode} vs fd ${fdHome}-${fdAway} — skipped`);
+          continue;
+        }
+      }
 
-      const adminOwned = m.resultStatus != null && (m.resultSource === "ADMIN" || m.resultConfirmed === true);
+      // Any human-touched result is off-limits to the provider: an explicit
+      // ADMIN source, a confirmed result, OR a non-null updatedBy (an admin
+      // saved it even with source=PROVIDER and left it unconfirmed).
+      const adminOwned =
+        m.resultStatus != null &&
+        (m.resultSource === "ADMIN" || m.resultConfirmed === true || m.resultUpdatedBy != null);
       const same =
         m.resultStatus === mapped.resultStatus &&
         m.resultBaseHome === mapped.baseHome &&
@@ -228,6 +271,9 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
 
     if (usableResults > 0) {
       await recomputeAll(`football-data: +${usableResults} результат(ов)`, null);
+      // Refresh the Google Sheet now instead of waiting for the 10-min cron
+      // (no-op if Sheets isn't configured).
+      exportSheetsInBackground();
     }
 
     outcome.ok = true;

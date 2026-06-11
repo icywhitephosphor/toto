@@ -155,16 +155,20 @@ function PersonView({
 }
 
 function CategoryView({ data }: { data: RevealResp }) {
-  const [catId, setCatId] = useState(data.categories[0]?.category_id ?? "");
-  const shown = data.categories.filter((c) => c.category_id === catId);
+  const [catId, setCatId] = useState<string | null>(null);
+  // Resolve against the live list every render so a not-yet-chosen (null) or
+  // stale id always falls back to the first category — the view can never go
+  // blank if categories load after first paint or reorder.
+  const active = data.categories.find((c) => c.category_id === catId) ?? data.categories[0];
+  if (!active) return null;
   return (
     <div className="stack gap-12">
-      <select className="input" value={catId} onChange={(e) => setCatId(e.target.value)} aria-label="Категория">
+      <select className="input" value={active.category_id} onChange={(e) => setCatId(e.target.value)} aria-label="Категория">
         {data.categories.map((c) => (
           <option key={c.category_id} value={c.category_id}>{c.name_ru}</option>
         ))}
       </select>
-      {shown.map((c) => (
+      {[active].map((c) => (
         <section key={c.category_id} className="card card-pad">
           <div className="row between">
             <div className="section-title" style={{ fontSize: 16 }}>{c.name_ru}</div>

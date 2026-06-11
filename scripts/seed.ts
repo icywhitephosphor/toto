@@ -118,14 +118,16 @@ async function main() {
         })),
       )
       .onConflictDoUpdate({
+        // Re-seed only refreshes the immutable structural columns. kickoff/
+        // deadline/venue/city are owned by the live provider after the first
+        // insert — overwriting them here would reset official times back to the
+        // seed approximations on every deploy and could briefly reopen a match
+        // whose real deadline already passed (bets are revealed after the
+        // deadline). The provider is the single source of truth for timing.
         target: [matches.tournamentId, matches.fifaMatchNo],
         set: {
           homeTeamId: sqlExcluded("home_team_id"),
           awayTeamId: sqlExcluded("away_team_id"),
-          kickoffAt: sqlExcluded("kickoff_at"),
-          deadlineAt: sqlExcluded("deadline_at"),
-          venue: sqlExcluded("venue"),
-          city: sqlExcluded("city"),
         },
       });
 
@@ -148,13 +150,13 @@ async function main() {
         })),
       )
       .onConflictDoUpdate({
+        // Same rule as the group block: only the slot placeholders are re-seeded.
+        // kickoff/venue/city are set on first insert and then refined by the
+        // provider — never clobbered by a later deploy.
         target: [matches.tournamentId, matches.fifaMatchNo],
         set: {
           homeSlot: sqlExcluded("home_slot"),
           awaySlot: sqlExcluded("away_slot"),
-          kickoffAt: sqlExcluded("kickoff_at"),
-          venue: sqlExcluded("venue"),
-          city: sqlExcluded("city"),
         },
       });
 

@@ -3,9 +3,17 @@
 // launches the Mini App. Always returns 200 so Telegram doesn't retry.
 // Verified via the X-Telegram-Bot-Api-Secret-Token header when the secret is set.
 import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 
 const APP_URL = "https://toto.icywhitephosphor.tech";
+
+/** Length-safe, constant-time string compare (avoids a timing side-channel). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ok = () => NextResponse.json({ ok: true });
@@ -19,7 +27,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       console.warn("[telegram/webhook] TELEGRAM_WEBHOOK_SECRET unset — ignoring all updates (fail-closed)");
       return ok();
     }
-    if (req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
+    const presented = req.headers.get("x-telegram-bot-api-secret-token");
+    if (!presented || !safeEqual(presented, secret)) {
       return ok(); // ignore unverified callers silently
     }
 

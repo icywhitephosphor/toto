@@ -33,6 +33,11 @@ function constantTimeHexEqual(expectedHex: string, receivedHex: string): boolean
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+// Allow a little clock skew between Telegram and us, but reject anything more
+// than this in the FUTURE — a far-future auth_date would otherwise pass the
+// "too old" check forever and widen the replay window arbitrarily.
+const MAX_FUTURE_SKEW_SECONDS = 5 * 60;
+
 function assertFresh(authDate: number): void {
   if (!authDate || Number.isNaN(authDate)) {
     throw new AppError(401, "INVALID_TELEGRAM_HASH", "Missing auth_date");
@@ -42,6 +47,9 @@ function assertFresh(authDate: number): void {
     throw new AppError(401, "INIT_DATA_EXPIRED", "Telegram auth_date too old (replay rejected)", {
       max_age_seconds: env.authReplayWindowSeconds,
     });
+  }
+  if (ageSeconds < -MAX_FUTURE_SKEW_SECONDS) {
+    throw new AppError(401, "INIT_DATA_EXPIRED", "Telegram auth_date is in the future (rejected)");
   }
 }
 

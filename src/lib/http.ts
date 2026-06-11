@@ -90,7 +90,14 @@ export interface ClientMeta {
 }
 
 export function clientMeta(req: NextRequest): ClientMeta {
+  // Trust the RIGHTMOST X-Forwarded-For entry, not the leftmost. Our only
+  // ingress is Caddy (the app binds 127.0.0.1:3000), and Caddy *appends* the
+  // real peer IP to whatever the client sent. The leftmost value is fully
+  // client-controlled, so reading it lets anyone spoof a fresh rate-limit
+  // bucket per request; the rightmost is the address Caddy actually observed.
   const fwd = req.headers.get("x-forwarded-for");
-  const ip = fwd ? fwd.split(",")[0].trim() : req.headers.get("x-real-ip");
+  const ip = fwd
+    ? fwd.split(",").map((s) => s.trim()).filter(Boolean).at(-1) ?? null
+    : req.headers.get("x-real-ip");
   return { ip: ip || null, userAgent: req.headers.get("user-agent") };
 }

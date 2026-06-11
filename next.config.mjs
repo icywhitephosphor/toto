@@ -23,7 +23,10 @@ const securityHeaders = [
     ].join("; "),
   },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  // No X-Frame-Options: the CSP `frame-ancestors` directive above is the modern,
+  // more expressive equivalent and already allows only ourselves + Telegram.
+  // A legacy `X-Frame-Options: SAMEORIGIN` would contradict it and break the
+  // Telegram Mini App, which frames us from *.telegram.org.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
 ];
 

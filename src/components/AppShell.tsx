@@ -25,6 +25,15 @@ const TABS = [
   { href: "/leaderboard", label: "Таблица", Icon: IconTable },
 ];
 
+// Drill-in routes that should keep their parent tab lit (the match-detail page
+// lives at /match/:id, the bonus reveal at /reveal/bonus).
+function tabIsActive(href: string, pathname: string): boolean {
+  if (href === "/") return pathname === "/";
+  if (href === "/matches") return pathname.startsWith("/matches") || pathname.startsWith("/match/");
+  if (href === "/bonus") return pathname.startsWith("/bonus") || pathname.startsWith("/reveal/");
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data, mutate } = useBootstrap();
@@ -69,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="tabbar">
           <div className="tabbar-inner">
             {tabs.map(({ href, label, Icon }) => {
-              const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+              const active = tabIsActive(href, pathname);
               return (
                 <Link key={href} href={href} className={`tab ${href === "/admin" ? "admin" : ""} ${active ? "active" : ""}`}>
                   <Icon />
