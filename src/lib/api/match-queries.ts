@@ -5,7 +5,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { matches, teams, matchResults } from "@/db/schema";
 import { TOURNAMENT_ID } from "@/lib/env";
-import { assignThirdSlots, computeGroupTables, projectSlot, type GroupGame, type SlotContext } from "@/domain/groupTables";
+import { assignThirdSlots, computeGroupTables, projectSlot, type GroupGame, type SlotContext, type TableRow } from "@/domain/groupTables";
+import { fetchOfficialTables } from "@/lib/provider/balldontlie";
 
 const homeTeam = alias(teams, "home_team");
 const awayTeam = alias(teams, "away_team");
@@ -74,7 +75,7 @@ type TeamShapeOut = ReturnType<typeof teamShape>;
 export type SerializedMatch = ReturnType<typeof serialize>;
 
 /** Slot projections from public results only — same visibility as the UI. */
-function attachProjections(list: SerializedMatch[], all: SerializedMatch[]): SerializedMatch[] {
+async function attachProjections(list: SerializedMatch[], all: SerializedMatch[]): Promise<SerializedMatch[]> {
   const teamsByGroup = new Map<string, string[]>();
   const teamById = new Map<string, NonNullable<TeamShapeOut>>();
   const games: GroupGame[] = [];
@@ -109,7 +110,26 @@ function attachProjections(list: SerializedMatch[], all: SerializedMatch[]): Ser
   }
 
   const teamName = (id: string) => teamById.get(id)?.name_ru ?? id;
-  const tables = computeGroupTables(games, teamsByGroup, teamName);
+  // Prefer the OFFICIAL group tables (balldontlie, full FIFA tie-breaks) and
+  // fall back to our simplified local ranking when the feed is absent/down.
+  const teamIdByCode = new Map<string, string>();
+  for (const t of teamById.values()) if (t.code) teamIdByCode.set(t.code, t.id);
+  let tables = computeGroupTables(games, teamsByGroup, teamName);
+  const official = await fetchOfficialTables();
+  if (official) {
+    const mapped = new Map<string, TableRow[]>();
+    let complete = true;
+    for (const [group, rows] of official) {
+      const table: TableRow[] = [];
+      for (const r of rows) {
+        const teamId = teamIdByCode.get(r.code);
+        if (!teamId) { complete = false; continue; }
+        table.push({ teamId, played: r.played, points: r.points, gf: r.gf, ga: r.ga });
+      }
+      mapped.set(group, table);
+    }
+    if (complete && mapped.size === teamsByGroup.size) tables = mapped;
+  }
   // 3RD slots are assigned in bracket order so each group's third is used once.
   const thirdSlots = all
     .filter((m) => m.stage === "R32")
@@ -204,5 +224,5 @@ export async function listMatches(filters: MatchFilters = {}): Promise<Serialize
 export async function getMatchById(id: string): Promise<SerializedMatch | null> {
   const all = (await runQuery(eq(matches.tournamentId, TOURNAMENT_ID))).map(serialize);
   const one = all.find((m) => m.id === id);
-  return one ? attachProjections([one], all)[0] : null;
+  return one ? (await attachProjections([one], all))[0] : null;
 }

@@ -45,6 +45,10 @@ export const env = {
   get fdToken() {
     return optional("FD_TOKEN");
   },
+  // balldontlie FIFA API key (ALL-STAR tier → official group standings).
+  get bdlKey() {
+    return optional("BDL_KEY");
+  },
   get googleSaJson() {
     return optional("GOOGLE_SA_JSON");
   },
