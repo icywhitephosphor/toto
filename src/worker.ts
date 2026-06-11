@@ -12,6 +12,7 @@ import { and, eq, gt, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { env } from "@/lib/env";
 import { runSheetsExport } from "@/lib/sheets";
+import { syncFootballData } from "@/lib/provider/sync";
 import { db } from "@/db";
 import { matches, matchBets, participants, users, teams, notificationLog, idempotencyKeys } from "@/db/schema";
 
@@ -152,8 +153,39 @@ cron.schedule("17 4 * * *", async () => {
   }
 });
 
+// ---- football-data.org polling ----------------------------------------------
+// One API call per pass (all 104 matches). Cadence: 15s while any match is in
+// a live window, otherwise sleep until ~1 min before the next kickoff (capped
+// at 10 min). Free tier allows 10 calls/min; 15s polling uses 4. The response's
+// x-requests-available-minute header additionally throttles us near the limit.
 if (feedConfigured) {
-  log("feed token present; provider polling lands in Phase 2 (see architecture/08).");
+  const IDLE_MS = 10 * 60_000;
+  const LIVE_MS = 15_000;
+  const loop = async () => {
+    let next = IDLE_MS;
+    try {
+      const out = await syncFootballData(log);
+      if (!out.ok) {
+        log(`fd sync failed: ${out.error ?? `HTTP ${out.httpStatus}`}`);
+        next = out.httpStatus === 429 ? 70_000 : 60_000;
+      } else {
+        if (out.fixturesUpdated || out.resultsApplied || out.unmatched) {
+          log(`fd sync: fixtures=${out.fixturesUpdated} results=${out.resultsApplied} unmatched=${out.unmatched}`);
+        }
+        if (out.liveNow) next = LIVE_MS;
+        else if (out.msToNextKickoff != null) {
+          next = Math.min(IDLE_MS, Math.max(LIVE_MS, out.msToNextKickoff - 60_000));
+        }
+      }
+      if (out.quotaRemaining != null && out.quotaRemaining <= 1) next = Math.max(next, 65_000);
+    } catch (err) {
+      log(`fd sync crashed: ${err instanceof Error ? err.message : String(err)}`);
+      next = 60_000;
+    }
+    setTimeout(loop, next);
+  };
+  setTimeout(loop, 5_000);
+  log("football-data polling enabled: 15s in live windows, otherwise until next kickoff (≤10m)");
 }
 
 // Keep the process alive even if no cron jobs were scheduled.

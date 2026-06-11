@@ -5,7 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { matches, teams, matchResults } from "@/db/schema";
 import { TOURNAMENT_ID } from "@/lib/env";
-import { computeGroupTables, projectSlot, type GroupGame, type SlotContext } from "@/domain/groupTables";
+import { assignThirdSlots, computeGroupTables, projectSlot, type GroupGame, type SlotContext } from "@/domain/groupTables";
 
 const homeTeam = alias(teams, "home_team");
 const awayTeam = alias(teams, "away_team");
@@ -107,7 +107,20 @@ function attachProjections(list: SerializedMatch[], all: SerializedMatch[]): Ser
     }
   }
 
-  const ctx: SlotContext = { tables: computeGroupTables(games, teamsByGroup), winnerByMatchNo, loserByMatchNo };
+  const teamName = (id: string) => teamById.get(id)?.name_ru ?? id;
+  const tables = computeGroupTables(games, teamsByGroup, teamName);
+  // 3RD slots are assigned in bracket order so each group's third is used once.
+  const thirdSlots = all
+    .filter((m) => m.stage === "R32")
+    .sort((a, b) => a.fifa_match_no - b.fifa_match_no)
+    .flatMap((m) => [m.home_slot, m.away_slot])
+    .filter((s): s is string => !!s && s.startsWith("3RD:"));
+  const ctx: SlotContext = {
+    tables,
+    winnerByMatchNo,
+    loserByMatchNo,
+    thirdAssignments: assignThirdSlots(thirdSlots, tables, teamName),
+  };
 
   return list.map((m) => {
     if (m.stage === "GROUP" || (m.home_team && m.away_team)) return m;
