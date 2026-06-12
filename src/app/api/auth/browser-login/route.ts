@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import { clientMeta } from "@/lib/http";
+import { clientMeta, publicOrigin } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { db } from "@/db";
 import { loginTokens, users, participants } from "@/db/schema";
@@ -13,7 +13,7 @@ import { signSession, setSessionCookie } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const origin = req.nextUrl.origin;
+  const origin = publicOrigin(req); // NOT nextUrl.origin — that's 0.0.0.0:3000 behind the proxy
   const fail = () => NextResponse.redirect(new URL("/?link=expired", origin));
   try {
     enforceRateLimit(req, "auth");

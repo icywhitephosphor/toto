@@ -89,6 +89,17 @@ export interface ClientMeta {
   userAgent: string | null;
 }
 
+/**
+ * Public origin for absolute URLs/redirects. Behind Caddy the request's own
+ * origin is the container address (0.0.0.0:3000) — the proxy headers carry
+ * the real one. Falls back sanely for local dev.
+ */
+export function publicOrigin(req: NextRequest): string {
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
+  const proto = req.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
 export function clientMeta(req: NextRequest): ClientMeta {
   // Trust the RIGHTMOST X-Forwarded-For entry, not the leftmost. Our only
   // ingress is Caddy (the app binds 127.0.0.1:3000), and Caddy *appends* the
