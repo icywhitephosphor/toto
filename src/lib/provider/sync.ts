@@ -23,7 +23,9 @@ import {
   fdCode,
   mapFinishedScore,
   type FdMatch,
+  type MappedResult,
 } from "./footballData";
+import { fetchWc26Scores } from "./worldcup26";
 
 const LEAD_MS = 3 * 3600_000;
 const pairKey = (a: string, b: string) => [a, b].sort().join("|");
@@ -78,6 +80,96 @@ async function loadLocal() {
 }
 
 type Local = Awaited<ReturnType<typeof loadLocal>>[number];
+
+// Any human-touched result is off-limits to every provider: an explicit ADMIN
+// source, a confirmed result, OR a non-null updatedBy (an admin saved it even
+// with source=PROVIDER and left it unconfirmed). Confirmed group results also
+// land here, which makes the first provider to publish a score the winner —
+// later providers can never flip-flop it.
+function isAdminOwned(m: Local): boolean {
+  return (
+    m.resultStatus != null &&
+    (m.resultSource === "ADMIN" || m.resultConfirmed === true || m.resultUpdatedBy != null)
+  );
+}
+
+/** Upsert a LIVE score row (display only — scoring ignores non-finals). */
+async function writeLive(m: Local, home: number, away: number, payload: unknown): Promise<boolean> {
+  const sameLive = m.resultStatus === "LIVE" && m.resultBaseHome === home && m.resultBaseAway === away;
+  if (sameLive) return false;
+  const liveValues = {
+    matchId: m.id,
+    resultStatus: "LIVE",
+    baseHome: home,
+    baseAway: away,
+    penHome: null,
+    penAway: null,
+    totoHome: home,
+    totoAway: away,
+    winnerTeamId: null,
+    source: "PROVIDER",
+    confirmed: false,
+    providerPayload: payload,
+    updatedBy: null,
+    updatedAt: new Date(),
+  };
+  await db.transaction(async (tx) => {
+    await tx.insert(matchResults).values(liveValues).onConflictDoUpdate({ target: matchResults.matchId, set: liveValues });
+    await tx.update(matches).set({ status: "LIVE", updatedAt: new Date() }).where(eq(matches.id, m.id));
+  });
+  return true;
+}
+
+/** Upsert a final result. `usable` = it feeds scoring (auto-confirmed group). */
+async function writeFinal(
+  m: Local,
+  mapped: MappedResult,
+  payload: unknown,
+  log: (msg: string) => void,
+): Promise<{ wrote: boolean; usable: boolean }> {
+  const same =
+    m.resultStatus === mapped.resultStatus &&
+    m.resultBaseHome === mapped.baseHome &&
+    m.resultBaseAway === mapped.baseAway &&
+    m.resultPenHome === mapped.penHome &&
+    m.resultPenAway === mapped.penAway;
+  if (same) return { wrote: false, usable: false };
+
+  const toto = totoScore({
+    baseHome: mapped.baseHome,
+    baseAway: mapped.baseAway,
+    penHome: mapped.penHome,
+    penAway: mapped.penAway,
+  });
+  const isGroup = m.stage === "GROUP";
+  const winnerTeamId =
+    toto.home > toto.away ? m.homeTeamId : toto.away > toto.home ? m.awayTeamId : null;
+  const values = {
+    matchId: m.id,
+    resultStatus: mapped.resultStatus,
+    baseHome: mapped.baseHome,
+    baseAway: mapped.baseAway,
+    penHome: mapped.penHome,
+    penAway: mapped.penAway,
+    totoHome: toto.home,
+    totoAway: toto.away,
+    winnerTeamId,
+    source: "PROVIDER",
+    confirmed: isGroup,
+    providerPayload: payload,
+    updatedBy: null,
+    updatedAt: new Date(),
+  };
+  await db.transaction(async (tx) => {
+    await tx.insert(matchResults).values(values).onConflictDoUpdate({ target: matchResults.matchId, set: values });
+    await tx
+      .update(matches)
+      .set({ status: isGroup ? "FINAL" : "AWAITING_CONFIRM", updatedAt: new Date() })
+      .where(eq(matches.id, m.id));
+  });
+  log(`result: №${m.fifaMatchNo} ${mapped.resultStatus} ${mapped.baseHome}:${mapped.baseAway}${isGroup ? "" : " (ждёт подтверждения админом)"}`);
+  return { wrote: true, usable: isGroup };
+}
 
 function findLocal(fd: FdMatch, ctx: {
   byProviderId: Map<string, Local>;
@@ -213,12 +305,7 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
         }
       }
 
-      // Any human-touched result is off-limits to the provider: an explicit
-      // ADMIN source, a confirmed result, OR a non-null updatedBy (an admin
-      // saved it even with source=PROVIDER and left it unconfirmed).
-      const adminOwned =
-        m.resultStatus != null &&
-        (m.resultSource === "ADMIN" || m.resultConfirmed === true || m.resultUpdatedBy != null);
+      const adminOwned = isAdminOwned(m);
 
       // Live passthrough: a running match with published numbers is stored as a
       // LIVE result row — display only, the scoring engine ignores everything
@@ -228,30 +315,7 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
         if (ft.home != null && ft.away != null) {
           const lh = swapped ? ft.away : ft.home;
           const la = swapped ? ft.home : ft.away;
-          const sameLive = m.resultStatus === "LIVE" && m.resultBaseHome === lh && m.resultBaseAway === la;
-          if (!sameLive) {
-            const liveValues = {
-              matchId: m.id,
-              resultStatus: "LIVE",
-              baseHome: lh,
-              baseAway: la,
-              penHome: null,
-              penAway: null,
-              totoHome: lh,
-              totoAway: la,
-              winnerTeamId: null,
-              source: "PROVIDER",
-              confirmed: false,
-              providerPayload: fd.score,
-              updatedBy: null,
-              updatedAt: new Date(),
-            };
-            await db.transaction(async (tx) => {
-              await tx.insert(matchResults).values(liveValues).onConflictDoUpdate({ target: matchResults.matchId, set: liveValues });
-              await tx.update(matches).set({ status: "LIVE", updatedAt: new Date() }).where(eq(matches.id, m.id));
-            });
-            outcome.liveUpdated += 1;
-          }
+          if (await writeLive(m, lh, la, fd.score)) outcome.liveUpdated += 1;
         }
         continue;
       }
@@ -267,50 +331,10 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
         }
         continue;
       }
-      if (!teamsKnown) continue;
-      const same =
-        m.resultStatus === mapped.resultStatus &&
-        m.resultBaseHome === mapped.baseHome &&
-        m.resultBaseAway === mapped.baseAway &&
-        m.resultPenHome === mapped.penHome &&
-        m.resultPenAway === mapped.penAway;
-      if (adminOwned || same) continue;
-
-      const toto = totoScore({
-        baseHome: mapped.baseHome,
-        baseAway: mapped.baseAway,
-        penHome: mapped.penHome,
-        penAway: mapped.penAway,
-      });
-      const isGroup = m.stage === "GROUP";
-      const winnerTeamId =
-        toto.home > toto.away ? m.homeTeamId : toto.away > toto.home ? m.awayTeamId : null;
-      const values = {
-        matchId: m.id,
-        resultStatus: mapped.resultStatus,
-        baseHome: mapped.baseHome,
-        baseAway: mapped.baseAway,
-        penHome: mapped.penHome,
-        penAway: mapped.penAway,
-        totoHome: toto.home,
-        totoAway: toto.away,
-        winnerTeamId,
-        source: "PROVIDER",
-        confirmed: isGroup,
-        providerPayload: fd.score,
-        updatedBy: null,
-        updatedAt: new Date(),
-      };
-      await db.transaction(async (tx) => {
-        await tx.insert(matchResults).values(values).onConflictDoUpdate({ target: matchResults.matchId, set: values });
-        await tx
-          .update(matches)
-          .set({ status: isGroup ? "FINAL" : "AWAITING_CONFIRM", updatedAt: new Date() })
-          .where(eq(matches.id, m.id));
-      });
-      outcome.resultsApplied += 1;
-      if (isGroup) usableResults += 1;
-      log(`result: №${m.fifaMatchNo} ${mapped.resultStatus} ${mapped.baseHome}:${mapped.baseAway}${isGroup ? "" : " (ждёт подтверждения админом)"}`);
+      if (!teamsKnown || adminOwned) continue;
+      const w = await writeFinal(m, mapped, fd.score, log);
+      if (w.wrote) outcome.resultsApplied += 1;
+      if (w.usable) usableResults += 1;
     }
 
     if (usableResults > 0) {
@@ -335,6 +359,104 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
         ok: outcome.ok,
         error: outcome.error ?? null,
         quotaRemaining: outcome.quotaRemaining,
+        startedAt,
+        finishedAt: new Date(),
+      });
+    } catch {
+      /* sync logging must never break the sync itself */
+    }
+  }
+}
+
+/**
+ * worldcup26.ir pass — the free LIVE-score + group-result source. Runs after
+ * the FD pass each tick. Matching is by stage + team pair ONLY (their match
+ * ids do not follow FIFA numbering). Group finals auto-confirm and recompute;
+ * play-off games get live display only (no extra-time/penalty split in their
+ * payload — FD/admin finalizes those). isAdminOwned/writeFinal make the first
+ * publisher win: once a group result is confirmed, nobody overwrites it.
+ */
+export async function syncWorldcup26(log: (msg: string) => void): Promise<SyncOutcome> {
+  const startedAt = new Date();
+  const fetched = await fetchWc26Scores();
+
+  const outcome: SyncOutcome = {
+    ok: false,
+    httpStatus: fetched.httpStatus,
+    fixturesUpdated: 0,
+    resultsApplied: 0,
+    liveUpdated: 0,
+    unmatched: 0,
+    liveNow: false,
+    awaitingScore: 0,
+    msToNextKickoff: null,
+    quotaRemaining: null,
+    error: fetched.error,
+  };
+
+  try {
+    if (!fetched.ok) return outcome;
+
+    const local = await loadLocal();
+    const byPair = new Map<string, Local>();
+    for (const m of local) {
+      if (m.homeCode && m.awayCode) byPair.set(`${m.stage}|${pairKey(m.homeCode, m.awayCode)}`, m);
+    }
+
+    const now = Date.now();
+    let usable = 0;
+
+    for (const s of fetched.scores) {
+      const m = byPair.get(`${s.stage}|${pairKey(s.homeCode, s.awayCode)}`);
+      if (!m) {
+        outcome.unmatched += 1;
+        continue;
+      }
+      // Orientation per match: our home must be one of the two (pair already
+      // matched), so a simple home-code comparison decides the swap.
+      const swapped = m.homeCode !== s.homeCode;
+      const home = swapped ? s.away : s.home;
+      const away = swapped ? s.home : s.away;
+      if (isAdminOwned(m)) continue;
+
+      const kickoffPassed = m.kickoffAt != null && m.kickoffAt.getTime() <= now;
+      if (s.finished && s.stage === "GROUP") {
+        const w = await writeFinal(
+          m,
+          { resultStatus: "FT", baseHome: home, baseAway: away, penHome: null, penAway: null },
+          { wc26: s },
+          log,
+        );
+        if (w.wrote) outcome.resultsApplied += 1;
+        if (w.usable) usable += 1;
+      } else if (kickoffPassed) {
+        // In play (or a finished play-off awaiting its official breakdown):
+        // keep the latest score visible.
+        if (!s.finished) outcome.liveNow = true;
+        if (await writeLive(m, home, away, { wc26: s })) outcome.liveUpdated += 1;
+      }
+    }
+
+    if (usable > 0) {
+      await recomputeAll(`worldcup26: +${usable} результат(ов)`, null);
+      exportSheetsInBackground();
+    }
+
+    outcome.ok = true;
+    return outcome;
+  } catch (err) {
+    outcome.error = err instanceof Error ? err.message : String(err);
+    return outcome;
+  } finally {
+    try {
+      await db.insert(providerSyncLog).values({
+        provider: "worldcup26.ir",
+        endpoint: "/get/games",
+        httpStatus: outcome.httpStatus,
+        items: fetched.scores.length,
+        ok: outcome.ok,
+        error: outcome.error ?? null,
+        quotaRemaining: null,
         startedAt,
         finishedAt: new Date(),
       });

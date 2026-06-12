@@ -12,7 +12,7 @@ import { and, eq, gt, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { env } from "@/lib/env";
 import { runSheetsExport } from "@/lib/sheets";
-import { syncFootballData } from "@/lib/provider/sync";
+import { syncFootballData, syncWorldcup26 } from "@/lib/provider/sync";
 import { db } from "@/db";
 import { matches, matchBets, participants, users, teams, notificationLog, idempotencyKeys } from "@/db/schema";
 
@@ -168,15 +168,27 @@ if (feedConfigured) {
       if (!out.ok) {
         log(`fd sync failed: ${out.error ?? `HTTP ${out.httpStatus}`}`);
         next = out.httpStatus === 429 ? 70_000 : 60_000;
-      } else {
-        if (out.fixturesUpdated || out.resultsApplied || out.liveUpdated || out.unmatched) {
-          log(`fd sync: fixtures=${out.fixturesUpdated} results=${out.resultsApplied} live=${out.liveUpdated} unmatched=${out.unmatched}`);
-        }
-        if (out.liveNow) next = LIVE_MS;
+      } else if (out.fixturesUpdated || out.resultsApplied || out.liveUpdated || out.unmatched) {
+        log(`fd sync: fixtures=${out.fixturesUpdated} results=${out.resultsApplied} live=${out.liveUpdated} unmatched=${out.unmatched}`);
+      }
+
+      // Second pass: worldcup26.ir (free) carries the live scores and group
+      // finals that FD's free tier withholds. Its failure must not slow the
+      // loop down — it just means we rely on FD/admin this tick.
+      const wc = await syncWorldcup26(log);
+      if (!wc.ok) log(`wc26 sync failed: ${wc.error ?? `HTTP ${wc.httpStatus}`}`);
+      else if (wc.resultsApplied || wc.liveUpdated) {
+        log(`wc26 sync: results=${wc.resultsApplied} live=${wc.liveUpdated} unmatched=${wc.unmatched}`);
+      }
+
+      if (out.ok) {
+        if (out.liveNow || wc.liveNow) next = LIVE_MS;
         else if (out.awaitingScore > 0) next = 60_000; // finished, score pending — hammer
         else if (out.msToNextKickoff != null) {
           next = Math.min(IDLE_MS, Math.max(LIVE_MS, out.msToNextKickoff - 60_000));
         }
+      } else if (wc.liveNow) {
+        next = LIVE_MS;
       }
       if (out.quotaRemaining != null && out.quotaRemaining <= 1) next = Math.max(next, 65_000);
     } catch (err) {
