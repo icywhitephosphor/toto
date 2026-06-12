@@ -34,16 +34,13 @@ export function BrowserLink() {
     }
   }
 
-  async function share() {
+  async function copy() {
     if (!url) return;
     try {
-      if (navigator.share) await navigator.share({ title: "ТОТО ЧМ-2026", url });
-      else {
-        await navigator.clipboard.writeText(url);
-        toast("Ссылка скопирована", "ok");
-      }
+      await navigator.clipboard.writeText(url);
+      toast("Ссылка скопирована", "ok");
     } catch {
-      /* user dismissed the share sheet */
+      toast("Выделите и скопируйте ссылку вручную", "err");
     }
   }
 
@@ -78,9 +75,9 @@ export function BrowserLink() {
             {url}
           </div>
           <div className="row gap-8 mt-8">
-            <button className="btn btn-sm" onClick={share}>Поделиться</button>
+            <button className="btn btn-sm" onClick={copy}>Скопировать</button>
             <span className="faint" style={{ fontSize: 11 }}>
-              Действует 10 минут, вход одноразовый. Никому не пересылайте — это вход в ваш аккаунт.
+              Действует 10 минут, вход одноразовый. Это вход в ВАШ аккаунт — никому не отправляйте.
             </span>
           </div>
         </div>
