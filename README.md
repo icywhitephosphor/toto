@@ -11,8 +11,8 @@ Telegram-логин, личные прогнозы, автоматический
 
 - **Next.js 16 (App Router) + React 19 + TypeScript** — UI и `/api/*` в одном приложении.
 - **PostgreSQL 16 + Drizzle ORM**; миграции — рукописный SQL (`migrations/`), DDL = `architecture/04`.
-- **Telegram Mini App `initData`** (основной) + **Login Widget** (запасной) — обе HMAC-схемы из `07`.
-- **node-cron worker** — плановый экспорт в Sheets (поллинг провайдера — Phase 2).
+- **Telegram Mini App `initData`** (основной) + **Login Widget** (браузер) — обе HMAC-схемы из `07`.
+- **node-cron worker** — поллинг football-data.org (результаты + live-счёт), напоминания о дедлайнах, экспорт в Sheets.
 - **Caddy** — авто-HTTPS (Let's Encrypt) на `toto.icywhitephosphor.tech`.
 - **Docker Compose**: `caddy + app + worker + db` на одном VPS.
 
@@ -26,13 +26,35 @@ src/scoring/        чистый движок подсчёта (+ тесты)
 src/domain/         seed-данные: команды, группы, сетка, бонусы, ростер, расписание, призы
 src/db/             Drizzle-схема + ленивый клиент
 src/lib/            http-обёртка, auth (telegram+JWT), recompute, leaderboard, sheets, ...
+src/lib/provider/   football-data.org: фикстуры, результаты, live-счёт, standings (+ тесты)
 src/lib/client/     браузерный API-клиент, SWR, хуки, форматирование
-src/components/     UI-компоненты (AppShell, MatchBetCard, BonusCategoryCard, ...)
+src/components/     UI-компоненты (AppShell, MatchBetCard, PlayoffBracket, ...)
 src/app/            страницы и роуты /api/*
 migrations/         канонический SQL (0001_init.sql)
-scripts/            migrate.ts, seed.ts
+scripts/            migrate.ts, seed.ts, deploy.sh
+tools/xlsx-import/  импорт ставок из xlsx «другого сайта» (parse → canon → dry-run → import)
+tools/ops/          одноразовые проверки: прогон FD-синка, чтение выгрузки Sheets
 e2e/                Playwright (изолированная БД toto_e2e)
 ```
+
+## Результаты и live-счёт (провайдер)
+
+Источник — **football-data.org** (`FD_TOKEN`, тариф «Free w/ Livescores», €12/мес):
+один запрос отдаёт все 104 матча. Воркер опрашивает: **15 с** во время матчей,
+**60 с** если матч завершён, но счёт ещё не опубликован, иначе спит до ближайшего
+стартового свистка (макс. 10 мин). Правила (`src/lib/provider/sync.ts`):
+
+- групповой результат применяется автоматически: запись → пересчёт очков → Sheets;
+- плей-офф приходит как `AWAITING_CONFIRM` — подтверждает админ (×2 и пенальти);
+- результат, введённый/подтверждённый человеком, провайдер никогда не перетирает;
+- прошедший дедлайн никогда не сдвигается (после дедлайна ставки раскрыты);
+- live-счёт идущего матча пишется строкой `LIVE` — только для отображения,
+  в зачёт идут исключительно FT/AET/PEN;
+- проекции сетки плей-офф берут официальные таблицы групп (`/standings`,
+  полные тай-брейки ФИФА) с фолбэком на локальный расчёт.
+
+Ручной ввод на крайний случай: админка → матч → результат (или
+`PATCH /api/admin/matches/:id/result`), пересчёт срабатывает сам.
 
 ## Локальная разработка
 
@@ -58,7 +80,7 @@ npm run dev                     # http://localhost:3000
 ## Тесты
 
 ```bash
-npm test          # юнит: движок подсчёта (26 тестов, все примеры из 05 §6)
+npm test          # юнит: движок, провайдер, проекции, таблица (50+ тестов)
 npm run typecheck # tsc --noEmit
 npm run e2e       # Playwright: изолированная БД toto_e2e + свой сервер на :3100
 ```

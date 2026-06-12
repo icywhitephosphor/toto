@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { matches, teams, matchResults } from "@/db/schema";
 import { TOURNAMENT_ID } from "@/lib/env";
 import { assignThirdSlots, computeGroupTables, projectSlot, type GroupGame, type SlotContext, type TableRow } from "@/domain/groupTables";
-import { fetchOfficialTables } from "@/lib/provider/balldontlie";
+import { fetchOfficialTables } from "@/lib/provider/footballData";
 
 const homeTeam = alias(teams, "home_team");
 const awayTeam = alias(teams, "away_team");
@@ -110,8 +110,9 @@ async function attachProjections(list: SerializedMatch[], all: SerializedMatch[]
   }
 
   const teamName = (id: string) => teamById.get(id)?.name_ru ?? id;
-  // Prefer the OFFICIAL group tables (balldontlie, full FIFA tie-breaks) and
-  // fall back to our simplified local ranking when the feed is absent/down.
+  // Prefer the OFFICIAL group tables (football-data standings, full FIFA
+  // tie-breaks); fall back to our simplified local ranking when the feed is
+  // absent or down.
   const teamIdByCode = new Map<string, string>();
   for (const t of teamById.values()) if (t.code) teamIdByCode.set(t.code, t.id);
   let tables = computeGroupTables(games, teamsByGroup, teamName);

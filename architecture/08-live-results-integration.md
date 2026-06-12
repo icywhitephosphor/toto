@@ -9,24 +9,35 @@ worker using `node-cron`. Domain: toto.icywhitephosphor.tech.
 
 ## 1. Provider Comparison
 
-| Criterion | **football-data.org** (v4) | API-Football v3 | TheSportsDB | openfootball/worldcup.json |
-|-----------|---------------------------|-----------------|-------------|---------------------------|
-| Free quota | 10 req/min | 100 req/day (resets 00:00 UTC) | Public; live = paid V2 | No key; static file |
-| Live latency (free) | ~1–3 min delayed | Near real-time (free, but quota kills it) | N/A (paid only) | N/A (community pushes) |
-| ET + penalty fields | Yes — `regularTime`, `extraTime`, `penalties`, `winner`, `duration` in `score` object | Yes — `score.halftime/fulltime/extratime/penalty` | Yes (historical) | Partial |
-| WC 2026 coverage | `WC` / competition id `2000` | league=1, season=2026 | Yes | Community-maintained |
-| Auth | Header `X-Auth-Token: <FD_TOKEN>` | Header `x-apisports-key: <key>` | Public key `123` | None |
-| Verdict | **PRIMARY** — sufficient free quota for our 104-match pool; ET/penalty breakdown available on free tier; `fifa_match_no` alignment via stable per-competition fixture ordering | Paid/real-time upgrade; 100 req/day far too tight for match-day polling | Logos and team artwork only; NOT for live data on free | Offline seed and fallback fixture list only |
+Compared on what matters for this pool: free quota, how "live" it is, whether it exposes **group
+standings** ("места групп"), and whether it gives the **extra-time/penalty breakdown** needed for the
+canonical play-off score (`05` §2). One row per provider.
 
-**Recommendation:**
-- **Primary:** football-data.org, free tier, all 104 matches.
-- **Play-off confirmation:** mandatory admin confirm for all matches 73–104 (R32…FINAL) before
-  scoring runs. High stakes, ×2 multiplier, penalty canonical score.
-- **Paid upgrade path:** API-Football as a drop-in via the `FootballProvider` interface (§2) once
-  quota becomes a concern (e.g. simultaneous group-stage matches in the final group-stage round).
-- **Logos:** TheSportsDB (key `123`) for `teams.logo_url` during seed — one-off, not polling.
-- **Backup seed:** openfootball `worldcup.json` for initial fixture list and cross-checking
-  `kickoff_at` / venue before the tournament starts.
+| Provider | Free quota / auth | Live (free) | Group standings | ET + penalty breakdown | WC-2026 | Best use here |
+|----------|-------------------|-------------|-----------------|------------------------|---------|---------------|
+| **football-data.org** (v4) | 10 req/min · `X-Auth-Token` | ~1–3 min delayed | Yes · `/competitions/WC/standings` | **Yes** · `regularTime`/`extraTime`/`penalties`/`winner`/`duration` | comp `WC` (id 2000) | **PRIMARY** — the only free feed with the penalty breakdown → canonical play-off score |
+| **balldontlie FIFA** | Free API key · rate-limited | **Yes** — updates during in-play games | **Yes** · `/fifa/worldcup/v1/group_standings` | No (final score only) | dedicated WC v1 (defaults 2026) | Best free source for a live group-stage feel + standings |
+| **worldcup26.ir** (open-source) | Free · JWT register/login, or self-host | Yes — auto-updates | **Yes** · `/get/groups` | No (home/away score only) | WC-only project | Free, **self-hostable** backup for standings + schedule |
+| **API-Football** (api-sports v3) | 100 req/day · `x-apisports-key` | Real-time data, but 100/day is far too few to poll live → effectively paid | Yes · `/standings?league=1&season=2026` | Yes · `score.extratime/penalty` | `league=1, season=2026` | Paid upgrade for true real-time |
+| **Live-Score API** | Small free tier | Yes (+ live standings) | Yes | Limited | WC competition | Live-focused alternative if FD quota pinches |
+| **TheSportsDB** | Free key `123` | No (live = paid V2) | Yes (`lookuptable`) | Historical only | Yes | Team logos/artwork + static tables, not live |
+| **Flashscore / Sofascore / 365scores** | — no official API — | — | — | — | — | **Avoid** — only unofficial scrapers (ToS risk, fragile, IP bans) |
+
+**Recommendation (free-tier):**
+- **Primary (correctness):** football-data.org — the only free feed that exposes the **penalty /
+  extra-time breakdown**, which is exactly what the canonical "toto" play-off score needs (`05` §2).
+  10 req/min is plenty: one call returns all 104 matches.
+- **For the live group-stage feel + group standings ("места групп"):** **balldontlie FIFA**
+  (`group_standings`, updates during live games) is an excellent free companion or alternative;
+  **worldcup26.ir** is a free, **self-hostable** backup you could even run on the same VPS. See §3.4.
+- **Play-off confirmation:** mandatory admin confirm for matches 73–104 (R32…FINAL) **regardless of
+  source** — none of the free "live-feel" feeds reliably expose penalty detail, and the ×2 stakes are high.
+- **Paid upgrade path:** API-Football (`league=1, season=2026`) for genuine real-time, drop-in via the
+  `FootballProvider` interface (§2).
+- **Logos:** TheSportsDB (key `123`) for `teams.logo_url` during seed (one-off). **Backup seed:**
+  openfootball `worldcup.json` or worldcup26.ir's bundled CSV/JSON for the initial fixture list.
+- **Avoid Flashscore / Sofascore / 365scores:** no official API; only unofficial scrapers — too fragile
+  to base scoring on.
 
 ---
 
@@ -300,6 +311,56 @@ curl -s \
   "goals": 7
 }
 ```
+
+### 3.4 Alternative free sources — group standings & live scores
+
+These are additional `FootballProvider` implementations (standings-focused). Use them for the live
+group-stage feel and the group tables; keep **football-data.org** for the play-off penalty breakdown.
+
+**balldontlie FIFA World Cup API** — free API key (from balldontlie.io), rate-limited, updates in
+real time while a game is in progress. Group standings ("места групп"):
+
+```bash
+curl -s -H "Authorization: $BALLDONTLIE_KEY" \
+  "https://api.balldontlie.io/fifa/worldcup/v1/group_standings?season=2026" | jq '.data[0]'
+```
+
+Companion endpoints (teams, games / live scores) are listed at `fifa.balldontlie.io`. It does not
+expose an extra-time/penalty split, so a play-off result taken from here still needs admin confirmation.
+
+**worldcup26.ir** (open-source `rezarahiminia/worldcup2026`, Node/Express/MongoDB, ISC license) — free,
+but every data route needs a JWT you get by self-registering (token valid ~84 days); or self-host it on
+the VPS from the repo's bundled CSV/JSON seed:
+
+```bash
+# 1) one-off: get a token (free self-register / login)
+curl -s -X POST "https://worldcup26.ir/auth/authenticate" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"…"}'          # → { "token": "…" }
+
+# 2) all 12 groups with standings ("места групп")
+curl -s -H "Authorization: Bearer $WC26_TOKEN" \
+  "https://worldcup26.ir/get/groups" | jq '.[0]'
+```
+
+```jsonc
+// GET /get/groups → one group (auto-updates during the tournament)
+{ "group": "G",
+  "teams": [ { "team_id": "25", "pts": "0", "gf": "0", "ga": "0" } ] }   // …4 teams
+
+// GET /get/game/:id → one match (NOTE: no ET/penalty breakdown — score only)
+{ "id": "1", "home_team_id": "1", "away_team_id": "2",
+  "home_score": 0, "away_score": 0, "group": "A", "matchday": "1",
+  "local_date": "June 11, 2026", "stadium_id": "1", "finished": false, "type": "group" }
+```
+
+Also exposes `GET /get/games` (all 104), `/get/teams`, `/get/stadiums`, `/health`. Mapping to
+`ProviderStanding[]`: `team_id → teams.provider_team_id`, `parseInt(pts/gf/ga)`, position by sort.
+Caveats: single-maintainer project — verify uptime before relying on it; no penalty/ET fields
+(play-offs need admin confirm either way); but ISC-licensed and self-hostable, so it doubles as a
+fully-controlled backup standings/schedule source on `72.56.232.82`.
+
+Env additions for these sources: `BALLDONTLIE_KEY`, `WC26_TOKEN` (or a self-hosted base URL).
 
 ---
 

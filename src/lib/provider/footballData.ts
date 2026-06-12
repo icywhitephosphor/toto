@@ -71,6 +71,84 @@ export async function fetchWcMatches(): Promise<FdFetchResult> {
   return { httpStatus: res.status, matches: body.matches ?? [], quotaRemaining };
 }
 
+// ---------------------------------------------------------------------------
+// Official group standings (paid tier) — feed the bracket projections with
+// FIFA's full tie-break ordering. Same caching contract the projections code
+// relied on before: 60s on success, 30s on failure, hard 1.5s timeout so the
+// request path never hangs on the provider.
+// ---------------------------------------------------------------------------
+interface FdStandingEntry {
+  group?: string | null; // "GROUP_A" / "Group A"
+  type?: string | null; // "TOTAL" when split tables exist
+  table?: Array<{
+    position: number;
+    playedGames: number;
+    points: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    team: { tla: string | null } | null;
+  }>;
+}
+
+export interface OfficialTableRow {
+  code: string; // FIFA code, identical to teams.code in our DB
+  position: number;
+  played: number;
+  points: number;
+  gf: number;
+  ga: number;
+}
+
+/** Pure: FD standings entries → per-group tables ordered by official position. */
+export function parseFdStandings(entries: FdStandingEntry[]): Map<string, OfficialTableRow[]> {
+  const byGroup = new Map<string, OfficialTableRow[]>();
+  for (const e of entries) {
+    if (e.type && e.type !== "TOTAL") continue;
+    const group = e.group?.replace(/^group[_\s]+/i, "");
+    if (!group) continue;
+    const rows: OfficialTableRow[] = [];
+    for (const r of e.table ?? []) {
+      const code = fdCode(r.team?.tla);
+      if (!code) continue;
+      rows.push({
+        code,
+        position: r.position,
+        played: r.playedGames,
+        points: r.points,
+        gf: r.goalsFor,
+        ga: r.goalsAgainst,
+      });
+    }
+    rows.sort((a, b) => a.position - b.position);
+    byGroup.set(group, rows);
+  }
+  return byGroup;
+}
+
+let standingsCache: { at: number; ttlMs: number; tables: Map<string, OfficialTableRow[]> | null } | null = null;
+
+export async function fetchOfficialTables(): Promise<Map<string, OfficialTableRow[]> | null> {
+  if (!env.fdToken) return null;
+  const now = Date.now();
+  if (standingsCache && now - standingsCache.at < standingsCache.ttlMs) return standingsCache.tables;
+  try {
+    const res = await fetch("https://api.football-data.org/v4/competitions/WC/standings", {
+      headers: { "X-Auth-Token": env.fdToken },
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json()) as { standings?: FdStandingEntry[] };
+    const tables = parseFdStandings(body.standings ?? []);
+    // A 48-team tournament must yield 12 groups; anything less is a bad payload.
+    if (tables.size < 12) throw new Error(`unexpected groups: ${tables.size}`);
+    standingsCache = { at: now, ttlMs: 60_000, tables };
+    return tables;
+  } catch {
+    standingsCache = { at: now, ttlMs: 30_000, tables: null };
+    return null;
+  }
+}
+
 export interface MappedResult {
   resultStatus: "FT" | "AET" | "PEN";
   baseHome: number;
