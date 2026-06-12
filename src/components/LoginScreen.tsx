@@ -18,6 +18,27 @@ declare global {
 
 type Mode = "detecting" | "telegram" | "browser";
 
+// Telegram launches a Mini App with the raw init data ALSO in the URL hash
+// (#tgWebAppData=<percent-encoded>). Reading it directly makes login work even
+// when the telegram.org SDK script is slow or blocked (common on RU mobile
+// networks) — exactly the case that produced the "bounces between two windows"
+// loop: no SDK → we wrongly concluded "browser" → «Открыть в Telegram» → chat
+// → app → repeat.
+function initDataFromHash(): string | null {
+  const m = /tgWebAppData=([^&]+)/.exec(window.location.hash);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+/** Are we inside a Telegram webview at all (even if the SDK never loads)? */
+function inTelegramContext(): boolean {
+  return /tgWebAppPlatform=/.test(window.location.hash) || window.location.hash.includes("tgWebAppData=");
+}
+
 export function LoginScreen() {
   const { mutate } = useBootstrap();
   const toast = useToast();
@@ -27,7 +48,7 @@ export function LoginScreen() {
   const started = useRef(false);
 
   const doMiniAppLogin = useCallback(async () => {
-    const initData = window.Telegram?.WebApp?.initData;
+    const initData = window.Telegram?.WebApp?.initData || initDataFromHash();
     if (!initData) return;
     setTgError(false);
     try {
@@ -39,20 +60,19 @@ export function LoginScreen() {
   }, [mutate]);
 
   // Detect environment: inside Telegram → auto-login; browser → show entry.
-  // initData can arrive a tick after mount (SDK still wiring up), so poll
-  // briefly before concluding "browser" — otherwise a real Mini App user can
-  // get stuck on the "Открыть в Telegram" screen.
+  // Priority: URL-hash init data (instant, SDK-independent) → SDK initData
+  // (may arrive a tick after mount) → browser. Poll longer when the hash says
+  // we ARE in Telegram, since the only thing missing is the slow SDK.
   useEffect(() => {
     if (started.current) return;
     let cancelled = false;
     let attempts = 0;
-    const MAX = 20; // ~3s of 150ms ticks before giving up on a Mini App context
 
     const detect = () => {
       if (cancelled || started.current) return;
       const wa = window.Telegram?.WebApp;
       wa?.ready?.(); // nudge the SDK to surface initData if it has it
-      const initData = wa?.initData;
+      const initData = wa?.initData || initDataFromHash();
       if (initData && initData.length > 0) {
         started.current = true;
         wa?.expand?.();
@@ -60,6 +80,8 @@ export function LoginScreen() {
         void doMiniAppLogin();
         return;
       }
+      // ~3s normally; ~10s when the hash proves a Telegram context.
+      const MAX = inTelegramContext() ? 65 : 20;
       if (attempts++ < MAX) {
         setTimeout(detect, 150);
         return;
@@ -74,12 +96,12 @@ export function LoginScreen() {
     };
   }, [doMiniAppLogin]);
 
-  // Browser path: official Telegram Login Widget (CSP already allows
-  // telegram.org / oauth.telegram.org). Requires the bot domain to be bound
-  // via BotFather /setdomain. The callback posts to /auth/telegram/widget.
+  // Telegram Login Widget (CSP already allows telegram.org/oauth.telegram.org;
+  // requires BotFather /setdomain). Shown in plain browsers AND as a fallback
+  // when Mini App auto-login fails (e.g. stale cached initData on Android).
   const widgetRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (mode !== "browser") return;
+    if (mode !== "browser" && !tgError) return;
     const host = widgetRef.current;
     if (!host || host.childElementCount > 0) return;
     (window as unknown as { onTelegramAuth?: (u: unknown) => void }).onTelegramAuth = async (user) => {
@@ -98,7 +120,7 @@ export function LoginScreen() {
     s.setAttribute("data-radius", "14");
     s.setAttribute("data-onauth", "onTelegramAuth(user)");
     host.appendChild(s);
-  }, [mode, mutate, toast]);
+  }, [mode, tgError, mutate, toast]);
 
   async function devLogin(tg: number, name: string) {
     setBusy(true);
@@ -133,6 +155,10 @@ export function LoginScreen() {
                   <button className="btn btn-primary btn-block" onClick={doMiniAppLogin}>
                     Повторить вход
                   </button>
+                  <div ref={widgetRef} className="center" style={{ display: "flex", justifyContent: "center" }} />
+                  <div className="faint center" style={{ fontSize: 12 }}>
+                    …или войдите кнопкой Telegram выше
+                  </div>
                 </>
               ) : (
                 <div className="muted center" style={{ fontSize: 15, padding: "6px 0" }}>
