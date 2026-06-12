@@ -178,29 +178,26 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
 
   return (
     <div className="card card-pad rise">
-      <div className="row between gap-8">
-        <div className="row gap-8">
-          <StageBadge stage={match.stage} group={match.group_code} />
-          {match.kickoff_at && <span className="chip faint mono">{fmtMsk(match.kickoff_at)}</span>}
-        </div>
-        {notOpen && <span className="chip chip-locked">Ждём участников</span>}
+      {/* One chip row: stage · kickoff · state. Finished/live cards keep all
+          three on a single line; upcoming cards show the two countdowns below. */}
+      <div className="row wrap gap-6">
+        <StageBadge stage={match.stage} group={match.group_code} />
+        {match.kickoff_at && <span className="chip faint mono">{fmtMsk(match.kickoff_at)}</span>}
+        {notOpen ? (
+          <span className="chip chip-locked">Ждём участников</span>
+        ) : finished ? (
+          <span className="chip chip-open">✓ Завершён{res!.result_status !== "FT" ? ` · ${res!.result_status === "PEN" ? "по пенальти" : "в доп. время"}` : ""}</span>
+        ) : inPlay ? (
+          <span className="chip chip-live"><span className="dot" /> Матч идёт{liveScore ? ` · ${liveScore.toto_home}:${liveScore.toto_away}` : ""}</span>
+        ) : null}
       </div>
 
-      {/* Status row. Before kickoff: two countdowns (betting deadline −3h, then
-          kickoff) in different colours. During the match: one live chip (with
-          the live score once the provider publishes it). After: «Завершён». */}
-      {!notOpen && (
+      {/* Two distinct countdowns until kickoff: betting deadline (−3h), then
+          the match itself — different colours so they're never confused. */}
+      {!notOpen && !finished && !inPlay && (
         <div className="cd-row mt-12">
-          {finished ? (
-            <span className="chip chip-open">✓ Завершён{res!.result_status !== "FT" ? ` · ${res!.result_status === "PEN" ? "по пенальти" : "в доп. время"}` : ""}</span>
-          ) : inPlay ? (
-            <span className="chip chip-live"><span className="dot" /> Матч идёт{liveScore ? ` · ${liveScore.toto_home}:${liveScore.toto_away}` : ""}</span>
-          ) : (
-            <>
-              <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
-              <Countdown target={match.kickoff_at} label="До матча" tone="kickoff" lockedLabel="Матч идёт" />
-            </>
-          )}
+          <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
+          <Countdown target={match.kickoff_at} label="До матча" tone="kickoff" lockedLabel="Матч идёт" />
         </div>
       )}
 
@@ -258,19 +255,21 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
         )}
 
         {locked ? (
-          <span className="row gap-6">
-            <span className="chip chip-locked">{hasBet ? `Моя ставка ${init.h}:${init.a}` : "Без ставки"}</span>
-            {finished && hasBet && myBet?.points != null && (
-              <span
-                className={`chip ${pointsClass(myBet.points, {
-                  exact: myBet.pred_home === res!.toto_home && myBet.pred_away === res!.toto_away,
-                  x2: myBet.x2,
-                })}`}
-              >
-                {fmtPts(myBet.points)} очк.
+          (() => {
+            const scored = finished && hasBet && myBet?.points != null;
+            const cls = scored
+              ? pointsClass(myBet!.points!, {
+                  exact: myBet!.pred_home === res!.toto_home && myBet!.pred_away === res!.toto_away,
+                  x2: myBet!.x2,
+                })
+              : "chip-locked";
+            return (
+              <span className="row gap-6">
+                <span className={`chip ${cls}`}>{hasBet ? `Моя ставка ${init.h}:${init.a}` : "Без ставки"}</span>
+                {scored && <span className={`chip ${cls}`}>{fmtPts(myBet!.points!)} очк.</span>}
               </span>
-            )}
-          </span>
+            );
+          })()
         ) : showEditor ? (
           <div className="row gap-8">
             {hasBet && (

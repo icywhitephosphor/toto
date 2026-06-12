@@ -25,7 +25,6 @@ import {
   type FdMatch,
   type MappedResult,
 } from "./footballData";
-import { fetchWc26Scores } from "./worldcup26";
 
 const LEAD_MS = 3 * 3600_000;
 const pairKey = (a: string, b: string) => [a, b].sort().join("|");
@@ -368,100 +367,3 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
   }
 }
 
-/**
- * worldcup26.ir pass — the free LIVE-score + group-result source. Runs after
- * the FD pass each tick. Matching is by stage + team pair ONLY (their match
- * ids do not follow FIFA numbering). Group finals auto-confirm and recompute;
- * play-off games get live display only (no extra-time/penalty split in their
- * payload — FD/admin finalizes those). isAdminOwned/writeFinal make the first
- * publisher win: once a group result is confirmed, nobody overwrites it.
- */
-export async function syncWorldcup26(log: (msg: string) => void): Promise<SyncOutcome> {
-  const startedAt = new Date();
-  const fetched = await fetchWc26Scores();
-
-  const outcome: SyncOutcome = {
-    ok: false,
-    httpStatus: fetched.httpStatus,
-    fixturesUpdated: 0,
-    resultsApplied: 0,
-    liveUpdated: 0,
-    unmatched: 0,
-    liveNow: false,
-    awaitingScore: 0,
-    msToNextKickoff: null,
-    quotaRemaining: null,
-    error: fetched.error,
-  };
-
-  try {
-    if (!fetched.ok) return outcome;
-
-    const local = await loadLocal();
-    const byPair = new Map<string, Local>();
-    for (const m of local) {
-      if (m.homeCode && m.awayCode) byPair.set(`${m.stage}|${pairKey(m.homeCode, m.awayCode)}`, m);
-    }
-
-    const now = Date.now();
-    let usable = 0;
-
-    for (const s of fetched.scores) {
-      const m = byPair.get(`${s.stage}|${pairKey(s.homeCode, s.awayCode)}`);
-      if (!m) {
-        outcome.unmatched += 1;
-        continue;
-      }
-      // Orientation per match: our home must be one of the two (pair already
-      // matched), so a simple home-code comparison decides the swap.
-      const swapped = m.homeCode !== s.homeCode;
-      const home = swapped ? s.away : s.home;
-      const away = swapped ? s.home : s.away;
-      if (isAdminOwned(m)) continue;
-
-      const kickoffPassed = m.kickoffAt != null && m.kickoffAt.getTime() <= now;
-      if (s.finished && s.stage === "GROUP") {
-        const w = await writeFinal(
-          m,
-          { resultStatus: "FT", baseHome: home, baseAway: away, penHome: null, penAway: null },
-          { wc26: s },
-          log,
-        );
-        if (w.wrote) outcome.resultsApplied += 1;
-        if (w.usable) usable += 1;
-      } else if (kickoffPassed) {
-        // In play (or a finished play-off awaiting its official breakdown):
-        // keep the latest score visible.
-        if (!s.finished) outcome.liveNow = true;
-        if (await writeLive(m, home, away, { wc26: s })) outcome.liveUpdated += 1;
-      }
-    }
-
-    if (usable > 0) {
-      await recomputeAll(`worldcup26: +${usable} результат(ов)`, null);
-      exportSheetsInBackground();
-    }
-
-    outcome.ok = true;
-    return outcome;
-  } catch (err) {
-    outcome.error = err instanceof Error ? err.message : String(err);
-    return outcome;
-  } finally {
-    try {
-      await db.insert(providerSyncLog).values({
-        provider: "worldcup26.ir",
-        endpoint: "/get/games",
-        httpStatus: outcome.httpStatus,
-        items: fetched.scores.length,
-        ok: outcome.ok,
-        error: outcome.error ?? null,
-        quotaRemaining: null,
-        startedAt,
-        finishedAt: new Date(),
-      });
-    } catch {
-      /* sync logging must never break the sync itself */
-    }
-  }
-}
