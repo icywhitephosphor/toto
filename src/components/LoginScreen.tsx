@@ -46,6 +46,10 @@ export function LoginScreen() {
   const [tgError, setTgError] = useState(false);
   const [busy, setBusy] = useState(false);
   const started = useRef(false);
+  // /api/auth/browser-login redirects here with ?link=expired on a dead link.
+  const [linkExpired] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("link") === "expired",
+  );
 
   const doMiniAppLogin = useCallback(async () => {
     const initData = window.Telegram?.WebApp?.initData || initDataFromHash();
@@ -148,6 +152,12 @@ export function LoginScreen() {
           </p>
 
           <div className="stack gap-10 mt-24">
+            {linkExpired && (
+              <div className="banner warn">
+                Ссылка для входа истекла или уже использована — получите новую в приложении
+                (Главная → «Веб-версия»).
+              </div>
+            )}
             {mode === "telegram" &&
               (tgError ? (
                 <>
@@ -174,6 +184,10 @@ export function LoginScreen() {
                 </a>
                 <div className="faint center" style={{ fontSize: 12 }}>
                   Вход через Telegram — в браузере кнопкой выше или в мини-приложении бота <span className="mono">@{BOT_USERNAME}</span>
+                </div>
+                <div className="banner" style={{ fontSize: 12.5 }}>
+                  Уже играете в Telegram? Откройте приложение → Главная → «Веб-версия» —
+                  получите одноразовую ссылку и войдите здесь без Telegram.
                 </div>
               </>
             )}

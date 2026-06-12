@@ -248,6 +248,21 @@ export const auditLog = pgTable(
   (t) => [index("audit_log_entity_idx").on(t.entityType, t.entityId, t.createdAt)],
 );
 
+// Magic browser-login links (0003): only the SHA-256 hash is stored; tokens
+// are single-use and short-lived. Telegram stays the primary login — this is
+// the opt-in web fallback.
+export const loginTokens = pgTable(
+  "login_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (t) => [index("login_tokens_expires_idx").on(t.expiresAt)],
+);
+
 export const providerSyncLog = pgTable("provider_sync_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   provider: text("provider").notNull(),

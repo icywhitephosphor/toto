@@ -92,6 +92,14 @@
 }
 
 :root {
+  /* Top inset under Telegram's floating controls (fullscreen Mini App) or the
+     device notch. The SDK sets the --tg-* vars; plain browsers fall back to
+     env(safe-area-inset-top). */
+  --safe-top: calc(
+    var(--tg-content-safe-area-inset-top, 0px) +
+    var(--tg-safe-area-inset-top, env(safe-area-inset-top, 0px))
+  );
+  --safe-bottom: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --r-sm: 8px;
   --r: 14px;
   --r-lg: 20px;
@@ -148,8 +156,9 @@ button { font: inherit; color: inherit; }
 .topbar {
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 2px 12px;
-  background: linear-gradient(180deg, var(--bg) 62%, transparent);
+  /* --safe-top keeps the logo clear of Telegram's fullscreen controls / notch. */
+  padding: calc(14px + var(--safe-top)) 2px 12px;
+  background: linear-gradient(180deg, var(--bg) 78%, transparent);
   backdrop-filter: blur(8px);
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
@@ -256,7 +265,7 @@ button { font: inherit; color: inherit; }
 /* ---- Tab bar --------------------------------------------------------------*/
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
-  padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+  padding: 0 12px calc(12px + var(--safe-bottom));
   display: flex; justify-content: center;
   pointer-events: none; /* only the inner panel is interactive */
   background: linear-gradient(0deg, var(--bg) 55%, transparent);

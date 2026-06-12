@@ -6,7 +6,10 @@ import type { NextResponse } from "next/server";
 import { env } from "./env";
 
 export const SESSION_COOKIE = "session";
-const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+// 45 days: comfortably outlives the tournament (final 19.07) + buffer, so
+// nobody has to log in again mid-championship. Active sessions are re-issued
+// when <7d remain, so in practice they never expire while the app is used.
+const TOKEN_TTL_SECONDS = 45 * 24 * 60 * 60;
 const REFRESH_WHEN_WITHIN_SECONDS = 7 * 24 * 60 * 60; // re-issue if <7d left
 
 export interface JwtPayload {

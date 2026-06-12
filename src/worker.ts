@@ -14,7 +14,7 @@ import { env } from "@/lib/env";
 import { runSheetsExport } from "@/lib/sheets";
 import { syncFootballData } from "@/lib/provider/sync";
 import { db } from "@/db";
-import { matches, matchBets, participants, users, teams, notificationLog, idempotencyKeys } from "@/db/schema";
+import { matches, matchBets, participants, users, teams, notificationLog, idempotencyKeys, loginTokens } from "@/db/schema";
 
 function log(msg: string) {
   console.log(`[worker ${new Date().toISOString()}] ${msg}`);
@@ -147,7 +147,8 @@ if (sheetsConfigured) {
 cron.schedule("17 4 * * *", async () => {
   try {
     await db.delete(idempotencyKeys).where(lt(idempotencyKeys.createdAt, new Date(Date.now() - 24 * 3600_000)));
-    log("idempotency keys older than 24h purged");
+    await db.delete(loginTokens).where(lt(loginTokens.expiresAt, new Date(Date.now() - 24 * 3600_000)));
+    log("idempotency keys + expired login tokens purged");
   } catch (err) {
     log(`idempotency purge FAILED: ${err instanceof Error ? err.message : String(err)}`);
   }

@@ -3,6 +3,7 @@ import { useBootstrap } from "@/lib/client/bootstrap";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ClaimScreen } from "@/components/ClaimScreen";
 import { MatchCalendar } from "@/components/MatchCalendar";
+import { BrowserLink } from "@/components/BrowserLink";
 
 export default function Home() {
   const { data, isLoading } = useBootstrap();
@@ -37,6 +38,8 @@ function Hub() {
       <div className="mt-16">
         <MatchCalendar />
       </div>
+
+      <BrowserLink />
     </div>
   );
 }
