@@ -2,7 +2,13 @@
 # HTTPS is mandatory for Telegram auth (07 §7). Security headers per 12 §4.1.
 
 toto.icywhitephosphor.tech {
-	reverse_proxy app:3000
+	# Hold-and-retry while the app container restarts during a deploy: instead
+	# of 502s, requests wait (up to 20s) for the new container to come up —
+	# effectively zero-downtime deploys on a single instance.
+	reverse_proxy app:3000 {
+		lb_try_duration 20s
+		lb_try_interval 300ms
+	}
 
 	encode zstd gzip
 

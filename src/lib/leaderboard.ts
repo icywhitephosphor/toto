@@ -42,18 +42,25 @@ function tiedForPlace(a: StandingRow, b: StandingRow): boolean {
   );
 }
 
+/**
+ * The ONE ordering used everywhere (official table and the live overlay):
+ * four-level tie-break, then alphabetically (ru) within a tie group — before
+ * any results land everyone is tied, and an id-ordered list reads as random.
+ */
+export function orderStandings(standings: StandingRow[]): StandingRow[] {
+  return [...standings].sort((a, b) =>
+    tiedForPlace(a, b)
+      ? a.displayName.localeCompare(b.displayName, "ru")
+      : compareStandings(toStanding(a), toStanding(b)),
+  );
+}
+
 export function buildLeaderboardRows(
   standings: StandingRow[],
   bonusByParticipant: Map<string, Map<string, number>>,
   settledCategories: Set<string>,
 ): LeaderboardRow[] {
-  // Within a tie group (same place) order alphabetically — before any results
-  // land everyone is tied, and an id-ordered list reads as random to users.
-  const sorted = [...standings].sort((a, b) =>
-    tiedForPlace(a, b)
-      ? a.displayName.localeCompare(b.displayName, "ru")
-      : compareStandings(toStanding(a), toStanding(b)),
-  );
+  const sorted = orderStandings(standings);
 
   const rows: LeaderboardRow[] = [];
   let place = 0;

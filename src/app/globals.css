@@ -307,6 +307,17 @@ button { font: inherit; color: inherit; }
 .pts-pos { color: var(--pitch) !important; }
 .pts-zero { color: var(--ink-faint) !important; }
 .pts-neg { color: var(--coral) !important; font-weight: 800; }
+/* Provisional (in-play) points: dashed underline, the ~ prefix is in markup. */
+.pts-prov { text-decoration: underline dashed; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+/* ---- Live leaderboard ------------------------------------------------------*/
+/* Flashscore-style movement vs the official table: ▲N up, ▼N down. */
+.mv { font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-align: center; }
+.mv-up { color: var(--pitch); }
+.mv-down { color: var(--coral); }
+.mv-flat { color: var(--ink-faint); }
+/* Pulsing dot inside the Live segment button. */
+.dot-live { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--coral); margin-right: 5px; animation: pulse 1.6s infinite; vertical-align: 1px; }
 .chip.pts-exact-x2, .chip.pts-exact { border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: color-mix(in srgb, var(--gold) 10%, transparent); }
 .chip.pts-pos { border-color: color-mix(in srgb, var(--pitch) 40%, transparent); background: var(--pitch-faint); }
 .chip.pts-neg { border-color: color-mix(in srgb, var(--coral) 45%, transparent); background: color-mix(in srgb, var(--coral) 10%, transparent); }

@@ -7,6 +7,7 @@ import { TeamPill, StageBadge, Empty, CardSkeleton, BackLink } from "@/component
 import { fmtMsk } from "@/lib/client/format";
 import { pointsClass, fmtPts } from "@/lib/client/points";
 import { ApiError } from "@/lib/client/api";
+import { scoreMatchBet } from "@/scoring";
 import type { ApiMatch, MyBet } from "@/lib/client/types";
 
 interface DetailResp { match: ApiMatch; my_bet: MyBet | null }
@@ -75,21 +76,33 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       {reveal && (
         <div className="card mt-12">
           {reveal.bets.map((b) => {
+            // Once any score exists (live OR final) every bet gets the points
+            // colour language. Officially earned points win; otherwise compute
+            // the provisional value from the current score with the same pure
+            // engine function the real scoring uses (~ marks it provisional).
+            const hasScore = m.result?.toto_home != null && m.result?.toto_away != null;
+            const provisional = b.points_earned == null && hasScore;
+            const pts =
+              b.points_earned ??
+              (hasScore && b.pred_home != null
+                ? scoreMatchBet(
+                    m.stage,
+                    { predHome: b.pred_home, predAway: b.pred_away!, x2: b.x2 },
+                    { home: m.result!.toto_home!, away: m.result!.toto_away! },
+                  )
+                : null);
             const exact =
-              m.result != null &&
-              b.pred_home != null &&
-              b.pred_home === m.result.toto_home &&
-              b.pred_away === m.result.toto_away;
-            const cls = b.points_earned == null ? "" : pointsClass(b.points_earned, { exact, x2: b.x2 });
+              hasScore && b.pred_home === m.result!.toto_home && b.pred_away === m.result!.toto_away;
+            const cls = pts == null ? "" : pointsClass(pts, { exact, x2: b.x2 });
             return (
               <div key={b.participant_id} className="lb-row" style={{ gridTemplateColumns: "1fr auto auto", gap: 10 }}>
                 <span className="lb-name">{b.display_name}</span>
-                <span className={`mono ${exact ? "pts-exact" : ""}`} style={{ fontSize: 16, color: b.pred_home == null ? "var(--ink-faint)" : undefined }}>
+                <span className={`mono ${cls}`} style={{ fontSize: 16, color: b.pred_home == null ? "var(--ink-faint)" : undefined }}>
                   {b.pred_home == null ? "—" : `${b.pred_home}:${b.pred_away}`}
                   {b.x2 && <span style={{ color: "var(--gold)" }}> ×2</span>}
                 </span>
-                <span className={`lb-pts ${cls}`} style={{ fontSize: 18, minWidth: 34, textAlign: "right" }}>
-                  {b.points_earned == null ? "·" : fmtPts(b.points_earned)}
+                <span className={`lb-pts ${cls} ${provisional ? "pts-prov" : ""}`} style={{ fontSize: 18, minWidth: 40, textAlign: "right" }}>
+                  {pts == null ? "·" : `${provisional ? "~" : ""}${fmtPts(pts)}`}
                 </span>
               </div>
             );

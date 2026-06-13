@@ -112,11 +112,46 @@ export interface LeaderboardRow {
   prize: { place: number; amount: number; label: string } | null;
 }
 
+export interface LiveContrib {
+  match_id: string;
+  fifa_match_no: number;
+  pred: [number, number];
+  x2: boolean;
+  points: number;
+}
+
+export interface LiveRow {
+  participant_id: string;
+  delta: number;
+  live_total: number;
+  live_pos: number;
+  official_pos: number;
+  moves: number; // positive = up N positions vs official, negative = down
+  contribs: LiveContrib[];
+}
+
+export interface LiveMatchInfo {
+  match_id: string;
+  fifa_match_no: number;
+  stage: Stage;
+  home: { code: string | null; name_ru: string | null };
+  away: { code: string | null; name_ru: string | null };
+  score: [number, number];
+  status: "LIVE" | "AWAITING_CONFIRM";
+}
+
+export interface LiveBlock {
+  active: boolean;
+  matches: LiveMatchInfo[];
+  rows: LiveRow[];
+}
+
 export interface Leaderboard {
   server_time: string;
   generated_at: string | null;
   reason: string | null;
   rows: LeaderboardRow[];
+  live?: LiveBlock;
 }
 
 export interface BonusItem {

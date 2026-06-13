@@ -29,6 +29,9 @@ echo "==> force-recreate app + worker onto the freshly built image"
 # Without --force-recreate, compose may keep the old container even after a rebuild.
 docker compose up -d --force-recreate --no-deps app worker
 
+echo "==> reload caddy config (graceful; applies Caddyfile changes without dropping connections)"
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
+
 echo "==> status"
 docker compose ps
 

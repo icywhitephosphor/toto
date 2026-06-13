@@ -8,7 +8,8 @@ import { route, ok } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { db } from "@/db";
 import { leaderboardSnapshots } from "@/db/schema";
-import { buildLeaderboardRows, type StandingRow } from "@/lib/leaderboard";
+import { buildLeaderboardRows, type LeaderboardRow, type StandingRow } from "@/lib/leaderboard";
+import { loadLiveBlock } from "@/lib/liveOverlay";
 import { TOURNAMENT_ID } from "@/lib/env";
 
 export const GET = route(async (req) => {
@@ -22,10 +23,13 @@ export const GET = route(async (req) => {
     .limit(1);
 
   if (snapshot) {
+    const rows = snapshot.rows as LeaderboardRow[];
     return ok({
       generated_at: snapshot.generatedAt.toISOString(),
       reason: snapshot.reason,
-      rows: snapshot.rows,
+      rows,
+      // Provisional in-play overlay (display only; empty when nothing is live).
+      live: await loadLiveBlock(rows),
     });
   }
 
@@ -43,5 +47,5 @@ export const GET = route(async (req) => {
   }));
 
   const rows = buildLeaderboardRows(standings, new Map(), new Set());
-  return ok({ generated_at: null, reason: null, rows });
+  return ok({ generated_at: null, reason: null, rows, live: await loadLiveBlock(rows) });
 });
