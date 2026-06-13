@@ -20,7 +20,15 @@ export const POST = route(async (req) => {
     throw new AppError(400, "MISSING_INIT_DATA", "init_data is required");
   }
 
-  const identity = verifyMiniAppInitData(initData);
+  let identity;
+  try {
+    identity = verifyMiniAppInitData(initData);
+  } catch (e) {
+    // Log auth failures (code only, no PII) so per-user login problems are
+    // visible in the logs instead of being a silent 401.
+    if (e instanceof AppError) console.warn(`[auth/miniapp] rejected: ${e.code} — ${e.message}`);
+    throw e;
+  }
   const { user, participant, token } = await loginWithIdentity(identity, clientMeta(req));
 
   const res = ok({ user: userShape(user), participant: participantShape(participant) });

@@ -38,14 +38,21 @@ function constantTimeHexEqual(expectedHex: string, receivedHex: string): boolean
 // "too old" check forever and widen the replay window arbitrarily.
 const MAX_FUTURE_SKEW_SECONDS = 5 * 60;
 
-function assertFresh(authDate: number): void {
+// Telegram does NOT regenerate a Mini App's initData on resume: a webview kept
+// in the background (typical on Android) replays the ORIGINAL auth_date for the
+// whole app lifetime. A short freshness window therefore locks out returning
+// users even though their HMAC is perfectly valid — which is the real auth.
+// So the Mini App window is generous (tournament span); the Login Widget, a
+// genuine one-shot redirect, keeps the tight default. `maxAge` null = no upper
+// bound (still guards against future-dated values).
+function assertFresh(authDate: number, maxAge: number | null): void {
   if (!authDate || Number.isNaN(authDate)) {
     throw new AppError(401, "INVALID_TELEGRAM_HASH", "Missing auth_date");
   }
   const ageSeconds = Date.now() / 1000 - authDate;
-  if (ageSeconds > env.authReplayWindowSeconds) {
+  if (maxAge != null && ageSeconds > maxAge) {
     throw new AppError(401, "INIT_DATA_EXPIRED", "Telegram auth_date too old (replay rejected)", {
-      max_age_seconds: env.authReplayWindowSeconds,
+      max_age_seconds: maxAge,
     });
   }
   if (ageSeconds < -MAX_FUTURE_SKEW_SECONDS) {
@@ -76,7 +83,8 @@ export function verifyMiniAppInitData(rawInitData: string): VerifiedIdentity {
   }
 
   const authDate = Number(params.get("auth_date"));
-  assertFresh(authDate);
+  // Generous: a backgrounded Mini App legitimately reuses old initData.
+  assertFresh(authDate, env.miniAppFreshnessSeconds);
 
   const userJson = params.get("user");
   if (!userJson) throw new AppError(401, "INVALID_TELEGRAM_HASH", "initData missing user");
@@ -123,7 +131,8 @@ export function verifyLoginWidget(payload: LoginWidgetPayload): VerifiedIdentity
   }
 
   const authDate = Number(rest.auth_date);
-  assertFresh(authDate);
+  // Tight: the widget callback is a fresh one-shot redirect.
+  assertFresh(authDate, env.authReplayWindowSeconds);
 
   return {
     id: Number(rest.id),

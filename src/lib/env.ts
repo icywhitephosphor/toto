@@ -51,10 +51,18 @@ export const env = {
   get sheetId() {
     return optional("SHEET_ID");
   },
-  // Replay window for Telegram auth_date freshness (07 §3.2). 1h default.
+  // Replay window for the Login Widget callback (one-shot redirect). 1h default.
   get authReplayWindowSeconds() {
     const v = optional("AUTH_REPLAY_WINDOW_SECONDS");
     return v ? Number(v) : 60 * 60;
+  },
+  // Freshness window for Mini App initData. Generous on purpose: Telegram
+  // replays the original auth_date for a backgrounded webview, so a short
+  // window locks out returning users despite a valid HMAC. 45 days ≈ outlives
+  // the tournament; the HMAC remains the real authenticator.
+  get miniAppFreshnessSeconds() {
+    const v = optional("MINIAPP_FRESHNESS_SECONDS");
+    return v ? Number(v) : 45 * 24 * 60 * 60;
   },
   get isProduction() {
     return process.env.NODE_ENV === "production";
