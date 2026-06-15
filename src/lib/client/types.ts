@@ -167,3 +167,68 @@ export interface MyBonusBet {
   submitted_at: string;
   updated_at: string;
 }
+
+// ---- Participant stats / profile (GET /api/participants/:id/stats) ----
+
+export type MatchKind = "EXACT" | "OUTCOME" | "MISS" | "NO_BET";
+
+export interface StatMatch {
+  match_id: string;
+  fifa_match_no: number;
+  stage: Stage;
+  home: { code: string | null; name_ru: string | null };
+  away: { code: string | null; name_ru: string | null };
+  result: [number, number] | null;
+  pred: [number, number] | null;
+  x2: boolean;
+  kind: MatchKind;
+  points: number;
+}
+
+export interface BonusPick {
+  team_id?: string;
+  code?: string | null;
+  name_ru?: string | null;
+  player_name?: string | null;
+  /** Whether this pick scored — computed server-side; null until settled. */
+  hit: boolean | null;
+}
+
+export interface BonusActual {
+  team_id?: string;
+  code?: string | null;
+  name_ru?: string | null;
+  player_name?: string | null;
+}
+
+export interface StatBonusCat {
+  category_id: string;
+  name_ru: string;
+  item_count: number;
+  points_per_correct: number;
+  item_type: "TEAM" | "PLAYER";
+  settled: boolean;
+  points_earned: number | null;
+  items: BonusPick[];
+  actual_items: BonusActual[] | null;
+}
+
+export interface ParticipantRank {
+  place: number; // dense rank (ties share a place)
+  official_pos: number; // visual position (index+1) — prize is computed from this
+  total_points: number;
+  match_points: number;
+  bonus_points: number;
+  playoff_match_points: number;
+  key_bonus_points: number;
+  prize: { place: number; amount: number; label: string } | null;
+}
+
+export interface ParticipantStats {
+  participant_id: string;
+  display_name: string;
+  summary: { exact: number; outcome: number; miss: number; no_bet: number };
+  matches: StatMatch[];
+  rank: ParticipantRank | null;
+  bonus: StatBonusCat[];
+}

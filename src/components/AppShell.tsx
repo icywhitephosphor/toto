@@ -31,6 +31,7 @@ function tabIsActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
   if (href === "/matches") return pathname.startsWith("/matches") || pathname.startsWith("/match/");
   if (href === "/bonus") return pathname.startsWith("/bonus") || pathname.startsWith("/reveal/");
+  if (href === "/leaderboard") return pathname.startsWith("/leaderboard") || pathname.startsWith("/participant/");
   return pathname === href || pathname.startsWith(href + "/");
 }
 

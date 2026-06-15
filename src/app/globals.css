@@ -321,6 +321,11 @@ button { font: inherit; color: inherit; }
 .chip.pts-exact-x2, .chip.pts-exact { border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: color-mix(in srgb, var(--gold) 10%, transparent); }
 .chip.pts-pos { border-color: color-mix(in srgb, var(--pitch) 40%, transparent); background: var(--pitch-faint); }
 .chip.pts-neg { border-color: color-mix(in srgb, var(--coral) 45%, transparent); background: color-mix(in srgb, var(--coral) 10%, transparent); }
+/* Filter-chip toggle (participant breakdown): the selected state wins over the
+   category tint above (defined later → higher in the cascade); empty → disabled. */
+button.chip { cursor: pointer; }
+.chip.sel { border-color: var(--pitch); background: var(--pitch-soft); color: var(--pitch); }
+.chip:disabled { opacity: 0.4; pointer-events: none; }
 
 /* ---- Prize fund -----------------------------------------------------------*/
 .prize-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }

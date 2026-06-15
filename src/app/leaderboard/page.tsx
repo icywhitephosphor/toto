@@ -5,30 +5,14 @@ import useSWR from "swr";
 import { useBootstrap } from "@/lib/client/bootstrap";
 import { PageHead, CardSkeleton, Empty, STAGE_LABEL } from "@/components/ui";
 import { fmtRub, plural } from "@/lib/client/format";
-import { BONUS_LABELS } from "@/lib/client/labels";
+import { ParticipantBreakdown } from "@/components/ParticipantBreakdown";
 import { pointsClass, fmtPts } from "@/lib/client/points";
 import { flag } from "@/lib/client/flags";
 import { useFlip } from "@/lib/client/useFlip";
 import { PRIZES, PRIZE_POOL, prizeForPlace } from "@/domain/prizes";
-import type { Leaderboard, LeaderboardRow, LiveBlock, LiveRow, Stage } from "@/lib/client/types";
+import type { Leaderboard, LeaderboardRow, LiveBlock, LiveRow } from "@/lib/client/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-
-interface StatsResp {
-  summary: { exact: number; outcome: number; miss: number; no_bet: number };
-  matches: Array<{
-    match_id: string;
-    fifa_match_no: number;
-    stage: Stage;
-    home: { code: string | null; name_ru: string | null };
-    away: { code: string | null; name_ru: string | null };
-    result: [number, number] | null;
-    pred: [number, number] | null;
-    x2: boolean;
-    kind: "EXACT" | "OUTCOME" | "MISS" | "NO_BET";
-    points: number;
-  }>;
-}
 
 export default function LeaderboardPage() {
   const { data: boot } = useBootstrap();
@@ -218,7 +202,6 @@ function LiveTable({ rows, live, meId, open, setOpen }: {
 // tied at zero the list is alphabetical and still numbered straight through,
 // per the organizer's call. The prize markers follow this visual position.
 function Row({ r, pos, me, open, onToggle }: { r: LeaderboardRow; pos: number; me: boolean; open: boolean; onToggle: () => void }) {
-  const settled = Object.entries(r.bonus_breakdown).filter(([, v]) => v !== null);
   const prize = prizeForPlace(pos);
   return (
     <div>
@@ -240,66 +223,17 @@ function Row({ r, pos, me, open, onToggle }: { r: LeaderboardRow; pos: number; m
 
       {open && (
         <div className="rise" style={{ padding: "4px 14px 16px 60px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 14px" }}>
-            <Detail label="Матчи (всего)" value={r.match_points} />
-            <Detail label="Плей-офф матчи" value={r.playoff_match_points} />
-            <Detail label="Бонусы (всего)" value={r.bonus_points} />
-            <Detail label="Ключевые бонусы" value={r.key_bonus_points} />
-            {settled.map(([cid, v]) => (
-              <Detail key={cid} label={BONUS_LABELS[cid] ?? cid} value={v as number} dim />
-            ))}
-          </div>
-          <MatchStats participantId={r.participant_id} />
+          <Link
+            href={`/participant/${r.participant_id}`}
+            className="row"
+            style={{ gap: 6, fontSize: 12.5, color: "var(--pitch)", fontWeight: 600 }}
+          >
+            Открыть профиль →
+          </Link>
+          <ParticipantBreakdown participantId={r.participant_id} variant="inline" />
         </div>
       )}
     </div>
   );
 }
 
-// Lazy per-participant breakdown: exact / outcome counts plus the actual
-// matches, each linking to its page. Loads only when the row is expanded.
-function MatchStats({ participantId }: { participantId: string }) {
-  const { data } = useSWR<StatsResp>(`/participants/${participantId}/stats`);
-  if (!data) return <div className="skel mt-12" style={{ height: 40 }} />;
-  const s = data.summary;
-  const played = data.matches.filter((m) => m.kind !== "NO_BET");
-  if (data.matches.length === 0) {
-    return <div className="faint mt-12" style={{ fontSize: 12 }}>Сыгранных матчей пока нет.</div>;
-  }
-  return (
-    <div className="mt-12">
-      <div className="row wrap gap-6" style={{ fontSize: 12 }}>
-        <span className="chip pts-exact">точный счёт · {s.exact}</span>
-        <span className="chip pts-pos">исход · {s.outcome}</span>
-        <span className="chip">мимо · {s.miss}</span>
-        {s.no_bet > 0 && <span className="chip chip-locked">без ставки · {s.no_bet}</span>}
-      </div>
-      <div className="stack mt-8" style={{ gap: 4 }}>
-        {data.matches.map((m) => (
-          <Link key={m.match_id} href={`/match/${m.match_id}`} className="row between gap-8" style={{ fontSize: 12.5, padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
-            <span className="muted" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {m.stage === "GROUP" ? `№${m.fifa_match_no}` : STAGE_LABEL[m.stage]} · {flag(m.home.code)} {m.home.name_ru} — {m.away.name_ru} {flag(m.away.code)}
-              {m.result && <span className="mono"> {m.result[0]}:{m.result[1]}</span>}
-            </span>
-            <span className="row gap-6" style={{ flex: "0 0 auto" }}>
-              <span className="mono faint">{m.pred ? `${m.pred[0]}:${m.pred[1]}${m.x2 ? " ×2" : ""}` : "—"}</span>
-              <span className={`mono ${pointsClass(m.points, { exact: m.kind === "EXACT", x2: m.x2 })}`} style={{ minWidth: 26, textAlign: "right" }}>
-                {m.kind === "NO_BET" ? "0" : fmtPts(m.points)}
-              </span>
-            </span>
-          </Link>
-        ))}
-      </div>
-      {played.length === 0 && <div className="faint mt-8" style={{ fontSize: 12 }}>Все матчи — без ставки.</div>}
-    </div>
-  );
-}
-
-function Detail({ label, value, dim }: { label: string; value: number; dim?: boolean }) {
-  return (
-    <div className="row between" style={{ fontSize: 12.5 }}>
-      <span className={dim ? "faint" : "muted"}>{label}</span>
-      <span className="mono" style={{ color: dim ? "var(--ink-dim)" : "var(--ink)" }}>{value}</span>
-    </div>
-  );
-}
