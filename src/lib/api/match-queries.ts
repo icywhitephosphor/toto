@@ -41,9 +41,11 @@ function serialize(r: Row) {
         }
       : null;
 
-  // Expose final results (FT/AET/PEN) and the LIVE in-play score (display
-  // only — scoring counts nothing but finals). AWAITING_CONFIRM play-off
-  // results stay hidden until the admin confirms them.
+  // Expose final results (FT/AET/PEN) and the LIVE in-play score (display only).
+  // The real-world score is public the moment it lands — including an unconfirmed
+  // play-off final (result_status=FT/AET/PEN, confirmed=false): the `confirmed`
+  // flag gates only whether the result is *counted* for points (see recompute's
+  // `usable` filter), never its visibility. We never surface a row with no score.
   const publicResult =
     result && ["FT", "AET", "PEN", "LIVE"].includes(result.result_status) ? result : null;
 

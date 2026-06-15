@@ -4,7 +4,7 @@
 // score_events/snapshots, so the money path stays exactly as it is. The
 // provisional set is the complement of recompute's `usable` filter, so a point
 // can never be counted twice.
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { matches, matchResults, matchBets, teams } from "@/db/schema";
@@ -130,13 +130,44 @@ export function computeLiveOverlay(
   return { active: true, matches: liveMatches, rows };
 }
 
+const FINAL_STATUSES = ["FT", "AET", "PEN"];
+
+export interface ProvisionalCandidate {
+  resultStatus: string;
+  stage: Stage;
+  confirmed: boolean;
+  totoHome: number | null;
+  totoAway: number | null;
+}
+
+/**
+ * True iff this result row contributes *provisional* (not-yet-official) points:
+ * it has a toto score AND is the exact complement of recompute's `usable`
+ * filter — an in-play LIVE row, or a final whose stage still needs admin
+ * confirmation (play-off). Pure (no clock); the deadline-visibility guard lives
+ * in the loader query, so a row can never be counted both here and officially.
+ */
+export function isProvisionalMatch(m: ProvisionalCandidate): boolean {
+  if (m.totoHome == null || m.totoAway == null) return false;
+  if (FINAL_STATUSES.includes(m.resultStatus)) {
+    // A final is official once GROUP, or once an admin confirms a play-off;
+    // provisional = the still-unconfirmed play-off final.
+    return m.stage !== "GROUP" && !m.confirmed;
+  }
+  return m.resultStatus === "LIVE";
+}
+
 const homeTeam = alias(teams, "lv_home");
 const awayTeam = alias(teams, "lv_away");
 
 /** Load the provisional match set + its bets and compute the overlay. */
 export async function loadLiveBlock(official: LeaderboardRow[]): Promise<LiveBlock> {
-  // Complement of the official `usable` filter: LIVE rows, or finals that are
-  // not yet confirmed for a non-group stage.
+  // Defence in depth: this endpoint is public and exposes each participant's
+  // pick, so only ever consider matches whose deadline has already passed (bets
+  // are revealed only then). In normal flow a LIVE row already implies the
+  // deadline is long gone (it = kickoff − 3h), but we must not leak a pick if a
+  // bad/manual result row ever lands before its deadline.
+  const now = new Date();
   const rows = await db
     .select({
       matchId: matches.id,
@@ -160,15 +191,22 @@ export async function loadLiveBlock(official: LeaderboardRow[]): Promise<LiveBlo
         eq(matches.tournamentId, TOURNAMENT_ID),
         isNotNull(matchResults.totoHome),
         isNotNull(matchResults.totoAway),
+        lte(matches.deadlineAt, now), // never expose picks before the deadline
       ),
     );
 
   const liveMatches: LiveMatchInfo[] = [];
   for (const r of rows) {
-    const isFinal = ["FT", "AET", "PEN"].includes(r.resultStatus);
-    const usable = isFinal && (r.stage === "GROUP" || r.confirmed === true);
-    if (usable) continue;
-    if (r.resultStatus !== "LIVE" && !isFinal) continue; // CANCELLED etc.
+    if (
+      !isProvisionalMatch({
+        resultStatus: r.resultStatus,
+        stage: r.stage as Stage,
+        confirmed: r.confirmed,
+        totoHome: r.totoHome,
+        totoAway: r.totoAway,
+      })
+    )
+      continue;
     liveMatches.push({
       match_id: r.matchId,
       fifa_match_no: r.no,

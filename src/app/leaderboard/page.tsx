@@ -120,7 +120,6 @@ function LiveTable({ rows, live, meId, open, setOpen }: {
   setOpen: (v: string | null) => void;
 }) {
   const byId = useMemo(() => new Map(rows.map((r) => [r.participant_id, r])), [rows]);
-  const liveById = useMemo(() => new Map(live.rows.map((r) => [r.participant_id, r])), [live]);
   const ordered = useMemo(() => [...live.rows].sort((a, b) => a.live_pos - b.live_pos), [live]);
   const matchByIdMap = useMemo(() => new Map(live.matches.map((m) => [m.match_id, m])), [live]);
   const flipRef = useFlip(ordered.map((r) => r.participant_id).join(","));

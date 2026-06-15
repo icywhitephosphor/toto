@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeLiveOverlay, type LiveMatchInfo } from "./liveOverlay";
+import { computeLiveOverlay, isProvisionalMatch, type LiveMatchInfo } from "./liveOverlay";
+import type { Stage } from "@/scoring";
 import type { LeaderboardRow } from "./leaderboard";
 
 const row = (id: string, name: string, total: number, over: Partial<LeaderboardRow> = {}): LeaderboardRow => ({
@@ -78,5 +79,39 @@ describe("computeLiveOverlay", () => {
   it("a no-bet participant gets delta 0 and an empty contribs list", () => {
     const live = computeLiveOverlay([row("a", "А", 0)], [liveGroup], []);
     expect(live.rows[0]).toMatchObject({ delta: 0, contribs: [], moves: 0 });
+  });
+});
+
+// The provisional set is the exact complement of recompute's `usable` filter.
+// This logic lives in loadLiveBlock's row loop; isProvisionalMatch is its pure,
+// clock-free core (the deadline-visibility guard is a separate query filter).
+describe("isProvisionalMatch", () => {
+  const base = { stage: "GROUP" as Stage, confirmed: false, totoHome: 1, totoAway: 0 };
+
+  it("includes a LIVE in-play row", () => {
+    expect(isProvisionalMatch({ ...base, resultStatus: "LIVE" })).toBe(true);
+  });
+
+  it("includes an unconfirmed play-off final (awaiting admin confirm)", () => {
+    expect(isProvisionalMatch({ ...base, stage: "R16", resultStatus: "FT", confirmed: false })).toBe(true);
+    expect(isProvisionalMatch({ ...base, stage: "FINAL", resultStatus: "PEN", confirmed: false })).toBe(true);
+  });
+
+  it("excludes a confirmed play-off final (already official)", () => {
+    expect(isProvisionalMatch({ ...base, stage: "R16", resultStatus: "FT", confirmed: true })).toBe(false);
+  });
+
+  it("excludes a group final (auto-confirmed → already official)", () => {
+    expect(isProvisionalMatch({ ...base, stage: "GROUP", resultStatus: "FT", confirmed: false })).toBe(false);
+  });
+
+  it("excludes non-live, non-final statuses (CANCELLED, SCHEDULED, …)", () => {
+    expect(isProvisionalMatch({ ...base, resultStatus: "CANCELLED" })).toBe(false);
+    expect(isProvisionalMatch({ ...base, resultStatus: "SCHEDULED" })).toBe(false);
+  });
+
+  it("excludes any row without a toto score", () => {
+    expect(isProvisionalMatch({ ...base, resultStatus: "LIVE", totoHome: null, totoAway: null })).toBe(false);
+    expect(isProvisionalMatch({ ...base, stage: "R16", resultStatus: "FT", totoHome: null, totoAway: 2 })).toBe(false);
   });
 });
