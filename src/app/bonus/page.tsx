@@ -58,14 +58,9 @@ export default function BonusPage() {
       />
 
       {locked ? (
-        <>
-          <div className="banner warn">
-            Приём бонусов закрыт (10 июня, 23:00 МСК). Прогнозы зафиксированы и раскрыты для всех.
-          </div>
-          <Link href="/reveal/bonus" className="btn btn-gold btn-block mt-12">
-            Посмотреть ставки всех участников
-          </Link>
-        </>
+        <Link href="/reveal/bonus" className="btn btn-gold btn-block">
+          Посмотреть ставки всех участников
+        </Link>
       ) : (
         <div className="banner">
           Выберите команды в каждой категории. Дубликаты внутри категории запрещены, нужно ровно нужное
