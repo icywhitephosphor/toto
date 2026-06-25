@@ -192,6 +192,9 @@ export const bonusOutcomes = pgTable(
     categoryId: text("category_id").notNull().references(() => bonusCategories.id),
     teamId: uuid("team_id").references(() => teams.id),
     playerName: text("player_name"),
+    // AUTO = derived from match results by recomputeAll; MANUAL = admin override.
+    // Auto-derivation rewrites only AUTO rows, never MANUAL (0004).
+    source: text("source").notNull().default("MANUAL"),
     settledAt: timestamp("settled_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.categoryId, t.teamId)],

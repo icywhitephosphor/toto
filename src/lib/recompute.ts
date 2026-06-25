@@ -16,7 +16,15 @@ import {
   scoreEvents,
   leaderboardSnapshots,
 } from "@/db/schema";
-import { scoreMatchBet, scoreBonusTeams, scoreTopScorer, outcome, type Stage } from "@/scoring";
+import {
+  scoreMatchBet,
+  scoreBonusTeams,
+  scoreTopScorer,
+  outcome,
+  deriveBonusOutcomes,
+  type DeriveMatch,
+  type Stage,
+} from "@/scoring";
 import { buildLeaderboardRows, type StandingRow } from "./leaderboard";
 import { writeAudit, type DbExecutor } from "./audit";
 import { TOURNAMENT_ID } from "./env";
@@ -91,7 +99,67 @@ export async function recomputeAll(
       })
       .from(bonusCategories);
 
-    // Actual outcomes per category.
+    // ---- Auto-derive bonus outcomes from match results (05 §4) ----
+    // Group winners + knockout participants are computed straight from results,
+    // so the organizer never hand-enters them. Read EVERY match (left join, so
+    // not-yet-played matches appear with usable=false) — stage-completeness must
+    // be detected, not inferred from the played subset. Manual settles
+    // (source='MANUAL') win and are never overwritten; only AUTO rows refresh.
+    const allForDerive = await tx
+      .select({
+        stage: matches.stage,
+        groupCode: matches.groupCode,
+        homeTeamId: matches.homeTeamId,
+        awayTeamId: matches.awayTeamId,
+        totoHome: matchResults.totoHome,
+        totoAway: matchResults.totoAway,
+        winnerTeamId: matchResults.winnerTeamId,
+        resultStatus: matchResults.resultStatus,
+        confirmed: matchResults.confirmed,
+      })
+      .from(matches)
+      .leftJoin(matchResults, eq(matchResults.matchId, matches.id));
+
+    const deriveInput: DeriveMatch[] = allForDerive.map((m) => ({
+      stage: m.stage,
+      groupCode: m.groupCode,
+      homeTeamId: m.homeTeamId,
+      awayTeamId: m.awayTeamId,
+      totoHome: m.totoHome,
+      totoAway: m.totoAway,
+      winnerTeamId: m.winnerTeamId,
+      usable:
+        m.resultStatus != null &&
+        ["FT", "AET", "PEN"].includes(m.resultStatus) &&
+        m.totoHome != null &&
+        m.totoAway != null &&
+        (m.stage === "GROUP" || m.confirmed === true),
+    }));
+
+    const derivations = deriveBonusOutcomes(deriveInput);
+    const manualCats = new Set(
+      (
+        await tx
+          .select({ categoryId: bonusOutcomes.categoryId })
+          .from(bonusOutcomes)
+          .where(eq(bonusOutcomes.source, "MANUAL"))
+      ).map((r) => r.categoryId),
+    );
+
+    await tx.delete(bonusOutcomes).where(eq(bonusOutcomes.source, "AUTO"));
+    const autoRows = derivations
+      .filter((d) => !manualCats.has(d.categoryId) && d.ready && d.teamIds)
+      .flatMap((d) => d.teamIds!.map((teamId) => ({ categoryId: d.categoryId, teamId, source: "AUTO" })));
+    if (autoRows.length) await tx.insert(bonusOutcomes).values(autoRows);
+
+    const autoSettled = derivations
+      .filter((d) => !manualCats.has(d.categoryId) && d.ready && d.teamIds)
+      .map((d) => d.categoryId);
+    const autoDeferred = derivations
+      .filter((d) => !manualCats.has(d.categoryId) && d.ready && !d.teamIds)
+      .map((d) => ({ category: d.categoryId, ambiguousGroups: d.ambiguousGroups ?? null }));
+
+    // Actual outcomes per category (now including any fresh AUTO rows).
     const outcomes = await tx.select().from(bonusOutcomes);
     const actualTeamsByCat = new Map<string, Set<string>>();
     const actualPlayerByCat = new Map<string, string>();
@@ -226,7 +294,12 @@ export async function recomputeAll(
       action: "RECOMPUTE",
       entityType: "tournament",
       entityId: TOURNAMENT_ID,
-      after: { score_events: eventCount, snapshot_id: snapshotId, reason },
+      after: {
+        score_events: eventCount,
+        snapshot_id: snapshotId,
+        reason,
+        auto_bonus: { settled: autoSettled, deferred: autoDeferred },
+      },
       reason,
     });
   };

@@ -148,7 +148,20 @@ function BonusSettleTab() {
     try {
       const actual = meta.itemType === "PLAYER" ? player.trim() : [...picked];
       await api.patch(`/admin/bonus/${catId}/settle`, { actual });
-      toast(`«${meta.nameRu}» подсчитано`, "ok");
+      toast(`«${meta.nameRu}» подсчитано (ручной ввод)`, "ok");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Ошибка", "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearOverride() {
+    if (!window.confirm(`Сбросить ручной ввод «${meta.nameRu}» и вернуть на автоподсчёт?`)) return;
+    setBusy(true);
+    try {
+      await api.delete(`/admin/bonus/${catId}/settle`);
+      toast(`«${meta.nameRu}» — ручной ввод снят, считается автоматически`, "ok");
     } catch (e) {
       toast(e instanceof ApiError ? e.message : "Ошибка", "err");
     } finally {
@@ -159,6 +172,9 @@ function BonusSettleTab() {
   return (
     <div className="card card-pad stack gap-12">
       <div className="eyebrow">Подведение итогов категории</div>
+      <div className="faint" style={{ fontSize: 12 }}>
+        Итоги считаются автоматически из результатов матчей (победители групп, участники стадий, чемпион) при каждом пересчёте. Ввод ниже — ручной оверрайд: для бомбардира (его не вывести из счёта) или спорного случая (напр. ничья в группе по фейр-плей). «Сбросить на авто» снимает оверрайд.
+      </div>
       <select className="input" value={catId} onChange={(e) => { setCatId(e.target.value); setPicked(new Set()); }}>
         {BONUS_META.map((c) => <option key={c.id} value={c.id}>{c.nameRu} ({c.itemCount})</option>)}
       </select>
@@ -182,7 +198,10 @@ function BonusSettleTab() {
         </>
       )}
       <button className="btn btn-gold btn-block" disabled={!complete || busy} onClick={settle}>
-        {busy ? "…" : "Подсчитать и пересчитать"}
+        {busy ? "…" : "Подсчитать вручную и пересчитать"}
+      </button>
+      <button className="btn btn-ghost btn-block" disabled={busy} onClick={clearOverride}>
+        Сбросить на авто
       </button>
     </div>
   );

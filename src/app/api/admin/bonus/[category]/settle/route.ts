@@ -1,7 +1,7 @@
 // PATCH /api/admin/bonus/:category/settle — record the actual outcome for a bonus
 // category, then recompute (06 §3.21, 05 §4). TEAM categories take an array of
 // team_ids (length must match item_count); TOP_SCORER takes a player name.
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { route, ok, AppError, clientMeta } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { requireAdmin } from "@/lib/auth";
@@ -30,7 +30,9 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
     throw new AppError(400, "BAD_REQUEST", "Malformed JSON body");
   }
 
-  const outcomeValues: Array<{ categoryId: string; teamId?: string; playerName?: string }> = [];
+  // source='MANUAL' pins these against recomputeAll's auto-derivation, which
+  // only ever rewrites source='AUTO' rows (05 §4).
+  const outcomeValues: Array<{ categoryId: string; teamId?: string; playerName?: string; source: string }> = [];
 
   if (cat.itemType === "TEAM") {
     const actual = body.actual;
@@ -48,14 +50,14 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
     );
     for (const id of actual as string[]) {
       if (!valid.has(id)) throw new AppError(422, "TEAM_NOT_IN_TOURNAMENT", `team_id ${id} not in wc2026`);
-      outcomeValues.push({ categoryId: category, teamId: id });
+      outcomeValues.push({ categoryId: category, teamId: id, source: "MANUAL" });
     }
   } else {
     const actual = body.actual;
     if (typeof actual !== "string" || actual.trim().length === 0) {
       throw new AppError(422, "EMPTY_PLAYER_NAME", "actual must be a non-empty player name");
     }
-    outcomeValues.push({ categoryId: category, playerName: actual.trim() });
+    outcomeValues.push({ categoryId: category, playerName: actual.trim(), source: "MANUAL" });
   }
 
   // A category can have several outcome rows (e.g. 12 group winners), so capture
@@ -89,6 +91,49 @@ export const PATCH = route<Ctx>(async (req, ctxArg) => {
   return ok({
     category_id: category,
     outcomes_written: outcomeValues.length,
+    recompute_triggered: true,
+    snapshot_id: snapshotId,
+  });
+});
+
+// DELETE /api/admin/bonus/:category/settle — drop a MANUAL override so the
+// category reverts to auto-derivation on the immediate recompute (05 §4).
+export const DELETE = route<Ctx>(async (req, ctxArg) => {
+  const ctx = await requireAdmin(req);
+  enforceRateLimit(req, "admin", ctx.user.id);
+  const { category } = await ctxArg.params;
+  const meta = clientMeta(req);
+
+  const [cat] = await db.select().from(bonusCategories).where(eq(bonusCategories.id, category)).limit(1);
+  if (!cat) throw new AppError(404, "CATEGORY_NOT_FOUND", "Unknown bonus category");
+
+  const manualFilter = and(eq(bonusOutcomes.categoryId, category), eq(bonusOutcomes.source, "MANUAL"));
+  const before = await db.select().from(bonusOutcomes).where(manualFilter);
+
+  let snapshotId = "";
+  await db.transaction(async (tx) => {
+    await tx.delete(bonusOutcomes).where(manualFilter);
+    await writeAudit(tx, {
+      actorUserId: ctx.user.id,
+      actorKind: "ADMIN",
+      action: "BONUS_CLEAR_OVERRIDE",
+      entityType: "bonus_outcome",
+      entityId: category,
+      before,
+      after: null,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    // Recompute re-derives this category automatically if its stage is complete.
+    const result = await recomputeAll(`bonus ${category} override cleared`, ctx.user.id, tx);
+    snapshotId = result.snapshotId;
+  });
+
+  exportSheetsInBackground();
+
+  return ok({
+    category_id: category,
+    override_cleared: before.length,
     recompute_triggered: true,
     snapshot_id: snapshotId,
   });
