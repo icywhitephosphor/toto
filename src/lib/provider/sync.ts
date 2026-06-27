@@ -58,6 +58,8 @@ async function loadLocal() {
       kickoffAt: matches.kickoffAt,
       deadlineAt: matches.deadlineAt,
       providerMatchId: matches.providerMatchId,
+      homeSlot: matches.homeSlot,
+      awaySlot: matches.awaySlot,
       homeTeamId: matches.homeTeamId,
       awayTeamId: matches.awayTeamId,
       homeCode: homeTeam.code,
@@ -217,6 +219,12 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
     if (!fetched.matches) return outcome;
 
     const local = await loadLocal();
+    // FIFA code -> team id, for assigning resolved knockout pairings from FD.
+    const teamIdByCode = new Map(
+      (await db.select({ id: teams.id, code: teams.code }).from(teams).where(eq(teams.tournamentId, TOURNAMENT_ID))).map(
+        (t) => [t.code, t.id] as const,
+      ),
+    );
     const byProviderId = new Map<string, Local>();
     const byPair = new Map<string, Local>();
     const byStageTime = new Map<string, Local[]>();
@@ -273,7 +281,38 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
         matchPatch.kickoffAt = fdKick;
         log(`fixture: №${m.fifaMatchNo} kickoff ${m.kickoffAt?.toISOString() ?? "null"} → ${fd.utcDate}`);
       }
-      const teamsKnown = m.homeTeamId != null && m.awayTeamId != null;
+
+      const fdHome = fdCode(fd.homeTeam.tla);
+      const fdAway = fdCode(fd.awayTeam.tla);
+
+      // --- knockout pairing assignment -------------------------------------
+      // Knockout fixtures are seeded team-less (home_slot/away_slot only). The
+      // moment FD names BOTH sides (the bracket resolved), assign the real teams
+      // in FD's orientation so the deadline can be set and betting — incl. ×2 —
+      // opens. Group matches always have teams; never reassign a match that
+      // already has both, and never write a half-known pairing (no betting vs a
+      // still-undecided "?" side).
+      let homeId = m.homeTeamId;
+      let awayId = m.awayTeamId;
+      if (m.stage !== "GROUP" && (homeId == null || awayId == null)) {
+        const newHome = fdHome ? teamIdByCode.get(fdHome) ?? null : null;
+        const newAway = fdAway ? teamIdByCode.get(fdAway) ?? null : null;
+        if (newHome && newAway) {
+          matchPatch.homeTeamId = newHome;
+          matchPatch.awayTeamId = newAway;
+          homeId = newHome;
+          awayId = newAway;
+          // Keep the in-memory snapshot in FD's orientation so the swap detection
+          // and orientation guard below use fresh codes (no spurious mismatch).
+          m.homeCode = fdHome;
+          m.awayCode = fdAway;
+          log(`bracket: №${m.fifaMatchNo} ${m.homeSlot ?? "?"}/${m.awaySlot ?? "?"} → ${fdHome} vs ${fdAway}`);
+        }
+      }
+
+      // teamsKnown reflects the post-assignment state, so a pairing resolved in
+      // THIS pass also gets its betting deadline in the same pass.
+      const teamsKnown = homeId != null && awayId != null;
       const newDeadline = new Date(fdKick.getTime() - LEAD_MS);
       const deadlinePassed = m.deadlineAt != null && m.deadlineAt.getTime() <= now;
       if (teamsKnown && !deadlinePassed && (m.deadlineAt?.getTime() ?? -1) !== newDeadline.getTime()) {
@@ -288,8 +327,6 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       // --- result ingest ---------------------------------------------------
       // Orientation: detect a swap from EITHER known side, not just home, so a
       // fixture we know only by one team is still oriented correctly.
-      const fdHome = fdCode(fd.homeTeam.tla);
-      const fdAway = fdCode(fd.awayTeam.tla);
       const swapped =
         (m.homeCode != null && fdHome != null && fdHome !== m.homeCode) ||
         (m.awayCode != null && fdAway != null && fdAway !== m.awayCode);
