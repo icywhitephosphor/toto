@@ -17,16 +17,11 @@ interface SaveResult {
   rejected: Array<{ match_id: string; status: string; reason?: string; deadline_at?: string }>;
 }
 
-function reconstructReg(bet: MyBet | null | undefined): { h: number; a: number; pen: "HOME" | "AWAY" | null } {
-  if (!bet) return { h: 0, a: 0, pen: null };
-  if (bet.pen_winner) {
-    return {
-      h: bet.pred_home - (bet.pen_winner === "HOME" ? 1 : 0),
-      a: bet.pred_away - (bet.pen_winner === "AWAY" ? 1 : 0),
-      pen: bet.pen_winner,
-    };
-  }
-  return { h: bet.pred_home, a: bet.pred_away, pen: null };
+// Play-off predictions are stored as the decisive score (the win is encoded in
+// the scoreline itself), so the saved bet maps straight to the inputs.
+function reconstructReg(bet: MyBet | null | undefined): { h: number; a: number } {
+  if (!bet) return { h: 0, a: 0 };
+  return { h: bet.pred_home, a: bet.pred_away };
 }
 
 function Stepper({ value, set, disabled }: { value: number; set: (n: number) => void; disabled: boolean }) {
@@ -105,7 +100,6 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
   const [h, setH] = useState(init.h);
   const [a, setA] = useState(init.a);
   const [x2, setX2] = useState(myBet?.x2 ?? false);
-  const [pen, setPen] = useState<"HOME" | "AWAY" | null>(init.pen);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -117,7 +111,6 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
     setH(init.h);
     setA(init.a);
     setX2(myBet?.x2 ?? false);
-    setPen(init.pen);
   }, [init, myBet, editing]);
 
   const notOpen = match.deadline_at === null;
@@ -133,32 +126,32 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
   const scoreH = showScore ? (res!.toto_home ?? 0) : h;
   const scoreA = showScore ? (res!.toto_away ?? 0) : a;
   const isDraw = h === a;
-  const needsPen = match.x2_allowed && isDraw;
+  // Play-off results are always decisive (the shootout folds into "+1 goal"),
+  // so a drawn play-off prediction can never score — block it on the spot.
+  const isPlayoffDraw = match.x2_allowed && isDraw;
   const hasBet = !!myBet;
 
   // Editor shows when placing a first bet, or after pressing "Изменить ставку".
   const showEditor = !locked && (editing || !hasBet);
-  const dirty =
-    h !== init.h || a !== init.a || x2 !== (myBet?.x2 ?? false) || (needsPen && pen !== init.pen);
-  const canSave = showEditor && !saving && (!hasBet || dirty);
+  const dirty = h !== init.h || a !== init.a || x2 !== (myBet?.x2 ?? false);
+  const canSave = showEditor && !saving && !isPlayoffDraw && (!hasBet || dirty);
 
   function resetToSaved() {
     setH(init.h);
     setA(init.a);
     setX2(myBet?.x2 ?? false);
-    setPen(init.pen);
   }
 
   async function save() {
-    if (needsPen && !pen) {
-      toast("Выберите, кто проходит по пенальти", "err");
+    if (isPlayoffDraw) {
+      toast("В плей-офф нужен победитель — ничья невозможна", "err");
       return;
     }
     setSaving(true);
     try {
       const res = await api.put<SaveResult>("/me/match-bets", {
         idempotency_key: uuid(),
-        bets: [{ match_id: match.id, pred_home: h, pred_away: a, x2, pen_winner: needsPen ? pen : null }],
+        bets: [{ match_id: match.id, pred_home: h, pred_away: a, x2 }],
       });
       if (res.saved.some((s) => s.match_id === match.id)) {
         toast("Прогноз сохранён", "ok");
@@ -192,8 +185,9 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
         ) : null}
       </div>
 
-      {/* Two distinct countdowns until kickoff: betting deadline (−3h), then
-          the match itself — different colours so they're never confused. */}
+      {/* Two distinct countdowns until kickoff: betting deadline (−3h group,
+          −2h play-off), then the match itself — different colours so they're
+          never confused. */}
       {!notOpen && !finished && !inPlay && (
         <div className="cd-row mt-12">
           <Countdown target={match.deadline_at} label="Приём ставок" tone="deadline" lockedLabel="Приём закрыт" />
@@ -207,17 +201,10 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
         <ScoreField team={match.away_team} projected={match.projected_away} slot={match.away_slot} value={showEditor ? a : scoreA} set={setA} saving={saving} editable={showEditor} notOpen={notOpen} />
       </div>
 
-      {showEditor && needsPen && (
-        <div className="mt-12 stack gap-6">
-          <div className="eyebrow">Ничья — кто проходит по пенальти?</div>
-          <div className="segmented">
-            <button className={`seg ${pen === "HOME" ? "active" : ""}`} onClick={() => setPen("HOME")}>
-              {match.home_team ? `${flag(match.home_team.code)} ${match.home_team.name_ru}` : "Хозяева"}
-            </button>
-            <button className={`seg ${pen === "AWAY" ? "active" : ""}`} onClick={() => setPen("AWAY")}>
-              {match.away_team ? `${flag(match.away_team.code)} ${match.away_team.name_ru}` : "Гости"}
-            </button>
-          </div>
+      {showEditor && isPlayoffDraw && (
+        <div className="mt-12" style={{ fontSize: 12.5, color: "var(--coral)" }}>
+          В плей-офф не бывает ничьих — добавьте гол команде, которая проходит дальше.
+          Серию пенальти указывать не нужно: счёт 3:2 сработает и за победу в основное время, и за 2:2 + пенальти.
         </div>
       )}
 
@@ -236,17 +223,9 @@ export function MatchBetCard({ match, myBet, onSaved, detailsLink = true }: { ma
           </button>
         ) : !showEditor && hasBet && !locked ? (
           <span className="chip chip-open">✓ Сохранено{myBet!.x2 ? " · ×2" : ""}</span>
-        ) : locked && hasBet && (init.pen || myBet!.x2) ? (
+        ) : locked && hasBet && myBet!.x2 ? (
           <span className="row gap-6">
-            {myBet!.x2 && <span className="chip">×2</span>}
-            {init.pen && (
-              <span className="chip">
-                Пен.:{" "}
-                {init.pen === "HOME"
-                  ? (match.home_team ? `${flag(match.home_team.code)} ${match.home_team.name_ru}` : "Хозяева")
-                  : (match.away_team ? `${flag(match.away_team.code)} ${match.away_team.name_ru}` : "Гости")}
-              </span>
-            )}
+            <span className="chip">×2</span>
           </span>
         ) : (
           <span className="faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

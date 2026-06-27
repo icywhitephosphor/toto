@@ -26,7 +26,9 @@ import {
   type MappedResult,
 } from "./footballData";
 
-const LEAD_MS = 3 * 3600_000;
+// Betting closes this long before kickoff: 2h for play-off matches (organizer
+// rule — more time to react once a pairing resolves), 3h for the group stage.
+const leadMsFor = (stage: string): number => (stage === "GROUP" ? 3 : 2) * 3600_000;
 const pairKey = (a: string, b: string) => [a, b].sort().join("|");
 
 export interface SyncOutcome {
@@ -313,7 +315,7 @@ export async function syncFootballData(log: (msg: string) => void): Promise<Sync
       // teamsKnown reflects the post-assignment state, so a pairing resolved in
       // THIS pass also gets its betting deadline in the same pass.
       const teamsKnown = homeId != null && awayId != null;
-      const newDeadline = new Date(fdKick.getTime() - LEAD_MS);
+      const newDeadline = new Date(fdKick.getTime() - leadMsFor(m.stage));
       const deadlinePassed = m.deadlineAt != null && m.deadlineAt.getTime() <= now;
       if (teamsKnown && !deadlinePassed && (m.deadlineAt?.getTime() ?? -1) !== newDeadline.getTime()) {
         matchPatch.deadlineAt = newDeadline;

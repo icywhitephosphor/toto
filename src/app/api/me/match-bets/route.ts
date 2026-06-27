@@ -11,7 +11,6 @@ import { requireParticipant } from "@/lib/auth";
 import { db } from "@/db";
 import { matches, matchBets, idempotencyKeys, scoreEvents } from "@/db/schema";
 import { writeAudit } from "@/lib/audit";
-import { derivePlayoffBet } from "@/scoring";
 
 export const GET = route(async (req) => {
   const ctx = await requireParticipant(req);
@@ -158,34 +157,23 @@ export const PUT = route(async (req) => {
     }
 
     const isDraw = bet.pred_home === bet.pred_away;
-    const penWinner = bet.pen_winner ?? null;
 
-    let storedHome = bet.pred_home;
-    let storedAway = bet.pred_away;
-    let storedPenWinner: "HOME" | "AWAY" | null = null;
-
+    // A play-off result is always the decisive toto score (regulation/ET +
+    // shootout, with the shootout folded into "+1 goal for the winner"), so it
+    // can never be a draw. The prediction is entered the same way — a decisive
+    // score — and a drawn play-off prediction is rejected. No separate penalty
+    // input: the winning side is simply whoever gets more goals (organizer rule).
     if (isDraw && m.x2Allowed) {
-      // Play-off draw: require a shootout winner, derive the decisive toto pred.
-      if (penWinner !== "HOME" && penWinner !== "AWAY") {
-        rejected.push({ match_id: bet.match_id, status: "PEN_WINNER_REQUIRED", reason: "Pick the shootout winner" });
-        continue;
-      }
-      const derived = derivePlayoffBet({ predHome: bet.pred_home, predAway: bet.pred_away, penWinner, x2: bet.x2 });
-      storedHome = derived.predHome;
-      storedAway = derived.predAway;
-      storedPenWinner = penWinner;
-      // The +1 shootout goal must keep the stored decisive score within 0..99.
-      if (storedHome > 99 || storedAway > 99) {
-        rejected.push({ match_id: bet.match_id, status: "INVALID_SCORE", reason: "Goals must be 0..99" });
-        continue;
-      }
-    } else {
-      // Group draw or any decisive score: pen_winner must not be set.
-      if (penWinner !== null) {
-        rejected.push({ match_id: bet.match_id, status: "PEN_WINNER_DISALLOWED", reason: "pen_winner only for play-off draws" });
-        continue;
-      }
+      rejected.push({
+        match_id: bet.match_id,
+        status: "PLAYOFF_DRAW_NOT_ALLOWED",
+        reason: "В плей-офф нужен победитель: укажите решающий счёт",
+      });
+      continue;
     }
+
+    const storedHome = bet.pred_home;
+    const storedAway = bet.pred_away;
 
     // Optimistic concurrency (opt-in).
     if (bet.version !== undefined) {
@@ -197,7 +185,7 @@ export const PUT = route(async (req) => {
       }
     }
 
-    toUpsert.push({ matchId: bet.match_id, predHome: storedHome, predAway: storedAway, x2: bet.x2, penWinner: storedPenWinner });
+    toUpsert.push({ matchId: bet.match_id, predHome: storedHome, predAway: storedAway, x2: bet.x2, penWinner: null });
   }
 
   if (toUpsert.length > 0) {
