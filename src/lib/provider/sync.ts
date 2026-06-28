@@ -7,8 +7,8 @@
 //     after the deadline — moving it would reopen a revealed market);
 //   • deadlines are only (re)set for matches whose both teams are known;
 //   • ADMIN-sourced or confirmed results are never overwritten;
-//   • group results auto-confirm (auto-scoring), play-off results land as
-//     AWAITING_CONFIRM for the admin (×2 + penalty stakes are too high).
+//   • ALL provider finals auto-confirm and score immediately (group + play-off);
+//     an admin can still override/recompute a wrong result afterwards.
 import { eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
@@ -123,19 +123,24 @@ async function writeLive(m: Local, home: number, away: number, payload: unknown)
   return true;
 }
 
-/** Upsert a final result. `usable` = it feeds scoring (auto-confirmed group). */
+/** Upsert a final result. Provider finals auto-confirm (group + play-off) so
+ *  they score the moment they land — `usable` is always true here. */
 async function writeFinal(
   m: Local,
   mapped: MappedResult,
   payload: unknown,
   log: (msg: string) => void,
 ): Promise<{ wrote: boolean; usable: boolean }> {
+  // "same" also requires the row to be already confirmed, so a result written
+  // before auto-confirm (an AWAITING_CONFIRM play-off final) is upgraded to
+  // confirmed and rescored on the next pass instead of being skipped.
   const same =
     m.resultStatus === mapped.resultStatus &&
     m.resultBaseHome === mapped.baseHome &&
     m.resultBaseAway === mapped.baseAway &&
     m.resultPenHome === mapped.penHome &&
-    m.resultPenAway === mapped.penAway;
+    m.resultPenAway === mapped.penAway &&
+    m.resultConfirmed === true;
   if (same) return { wrote: false, usable: false };
 
   const toto = totoScore({
@@ -144,7 +149,6 @@ async function writeFinal(
     penHome: mapped.penHome,
     penAway: mapped.penAway,
   });
-  const isGroup = m.stage === "GROUP";
   const winnerTeamId =
     toto.home > toto.away ? m.homeTeamId : toto.away > toto.home ? m.awayTeamId : null;
   const values = {
@@ -158,20 +162,17 @@ async function writeFinal(
     totoAway: toto.away,
     winnerTeamId,
     source: "PROVIDER",
-    confirmed: isGroup,
+    confirmed: true,
     providerPayload: payload,
     updatedBy: null,
     updatedAt: new Date(),
   };
   await db.transaction(async (tx) => {
     await tx.insert(matchResults).values(values).onConflictDoUpdate({ target: matchResults.matchId, set: values });
-    await tx
-      .update(matches)
-      .set({ status: isGroup ? "FINAL" : "AWAITING_CONFIRM", updatedAt: new Date() })
-      .where(eq(matches.id, m.id));
+    await tx.update(matches).set({ status: "FINAL", updatedAt: new Date() }).where(eq(matches.id, m.id));
   });
-  log(`result: №${m.fifaMatchNo} ${mapped.resultStatus} ${mapped.baseHome}:${mapped.baseAway}${isGroup ? "" : " (ждёт подтверждения админом)"}`);
-  return { wrote: true, usable: isGroup };
+  log(`result: №${m.fifaMatchNo} ${mapped.resultStatus} ${mapped.baseHome}:${mapped.baseAway}`);
+  return { wrote: true, usable: true };
 }
 
 function findLocal(fd: FdMatch, ctx: {
