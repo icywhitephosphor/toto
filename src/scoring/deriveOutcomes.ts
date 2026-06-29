@@ -34,9 +34,16 @@ export interface DeriveMatch {
 
 export interface Derivation {
   categoryId: string;
-  /** Every input match for this category is in (stage complete). */
+  /** At least one actual team is known → write outcomes so points start to
+   *  accrue. Categories settle PARTIALLY: each confirmed team is credited as
+   *  soon as it's known, without waiting for the whole stage (set intersection
+   *  is monotonic, so a participant's points only grow). */
   ready: boolean;
-  /** The settled team-id set, or null when not ready or genuinely ambiguous. */
+  /** The actual set is final — every team that reaches this stage is known and
+   *  won't change. Until then a not-yet-advanced pick is *pending*, not a miss. */
+  complete: boolean;
+  /** The confirmed-so-far team-id set, or null when nothing is known yet or the
+   *  result is genuinely ambiguous (GROUP_WINNER dead tie). */
   teamIds: string[] | null;
   /** GROUP_WINNER only: groups whose winner is a dead tie needing a manual call. */
   ambiguousGroups?: string[];
@@ -100,8 +107,11 @@ function groupWinner(games: DeriveMatch[], teamIds: string[]): string | null {
 
 function deriveGroupWinners(matches: DeriveMatch[]): Derivation {
   const group = matches.filter((m) => m.stage === "GROUP");
+  // Group winners are settled as a set once every group match is in (the
+  // standings — and thus rank 1 — can shift until the last whistle), so this
+  // stays all-or-nothing rather than partial.
   const ready = group.length > 0 && group.every((m) => m.usable);
-  if (!ready) return { categoryId: "GROUP_WINNER", ready: false, teamIds: null };
+  if (!ready) return { categoryId: "GROUP_WINNER", ready: false, complete: false, teamIds: null };
 
   const byGroup = new Map<string, Set<string>>();
   for (const m of group) {
@@ -119,9 +129,9 @@ function deriveGroupWinners(matches: DeriveMatch[]): Derivation {
     else ambiguous.push(code);
   }
   if (ambiguous.length) {
-    return { categoryId: "GROUP_WINNER", ready: true, teamIds: null, ambiguousGroups: ambiguous };
+    return { categoryId: "GROUP_WINNER", ready: true, complete: false, teamIds: null, ambiguousGroups: ambiguous };
   }
-  return { categoryId: "GROUP_WINNER", ready: true, teamIds: winners };
+  return { categoryId: "GROUP_WINNER", ready: true, complete: true, teamIds: winners };
 }
 
 function deriveStageWinners(
@@ -131,9 +141,12 @@ function deriveStageWinners(
   expected: number,
 ): Derivation {
   const sm = matches.filter((m) => m.stage === stage);
-  const ready = sm.length === expected && sm.every((m) => m.usable && m.winnerTeamId != null);
-  if (!ready) return { categoryId, ready: false, teamIds: null };
-  return { categoryId, ready: true, teamIds: sm.map((m) => m.winnerTeamId!) };
+  // Partial settlement: credit each confirmed winner the moment it's known,
+  // without waiting for the whole stage. The actual set only grows, so points
+  // are monotonic. `complete` flips once every match of the stage is decided.
+  const winners = sm.filter((m) => m.usable && m.winnerTeamId != null).map((m) => m.winnerTeamId!);
+  const complete = sm.length === expected && winners.length === expected;
+  return { categoryId, ready: winners.length > 0, complete, teamIds: winners.length > 0 ? winners : null };
 }
 
 /**

@@ -126,8 +126,11 @@ function BonusList({ bonus }: { bonus: StatBonusCat[] }) {
         <div key={cat.category_id} style={{ paddingBottom: 8, borderBottom: "1px solid var(--line)" }}>
           <div className="row between" style={{ fontSize: 12.5 }}>
             <span className="muted">{cat.name_ru}</span>
-            <span className={`mono ${cat.settled ? pointsClass(cat.points_earned ?? 0) : "faint"}`}>
-              {cat.settled ? fmtPts(cat.points_earned ?? 0) : "ещё не разыграно"}
+            <span className="row gap-6" style={{ flex: "0 0 auto" }}>
+              {cat.settled && !cat.complete && <span className="faint" style={{ fontSize: 11 }}>идёт</span>}
+              <span className={`mono ${cat.settled ? pointsClass(cat.points_earned ?? 0) : "faint"}`}>
+                {cat.settled ? fmtPts(cat.points_earned ?? 0) : "ещё не разыграно"}
+              </span>
             </span>
           </div>
           <div className="row wrap gap-6" style={{ marginTop: 5 }}>

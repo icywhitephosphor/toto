@@ -141,29 +141,52 @@ describe("deriveBonusOutcomes — GROUP_WINNER", () => {
 // --- knockout participant categories --------------------------------------
 
 describe("deriveBonusOutcomes — knockout winners", () => {
-  it("derives R16 participants from the 16 R32 winners", () => {
+  it("derives R16 participants from the 16 R32 winners (complete)", () => {
     const d = get(deriveBonusOutcomes(stage("R32", 16)), "R16_PARTICIPANT");
     expect(d.ready).toBe(true);
+    expect(d.complete).toBe(true);
     expect(d.teamIds).toHaveLength(16);
     expect(d.teamIds).toEqual(Array.from({ length: 16 }, (_, i) => `R32_w${i}`));
   });
 
-  it("is not ready until every match of the stage is usable", () => {
+  it("partially settles: credits a single confirmed winner immediately", () => {
+    // Only one R32 match decided so far — that winner is credited right away,
+    // the category is not yet complete. (The "Canada into the R16" case.)
+    const ms = stage("R32", 16, false); // none usable...
+    ms[0] = km("R32", "CAN", "RSA"); // ...except one confirmed winner
+    const d = get(deriveBonusOutcomes(ms), "R16_PARTICIPANT");
+    expect(d.ready).toBe(true);
+    expect(d.complete).toBe(false);
+    expect(d.teamIds).toEqual(["CAN"]);
+  });
+
+  it("credits confirmed winners while a match is still in play (partial)", () => {
     const ms = stage("R32", 16);
     ms[5] = km("R32", "R32_w5", "R32_l5", false); // one still in play
     const d = get(deriveBonusOutcomes(ms), "R16_PARTICIPANT");
+    expect(d.ready).toBe(true);
+    expect(d.complete).toBe(false);
+    expect(d.teamIds).toHaveLength(15);
+    expect(d.teamIds).not.toContain("R32_w5");
+  });
+
+  it("stays incomplete when the stage is short a match", () => {
+    const d = get(deriveBonusOutcomes(stage("R16", 7)), "QF_PARTICIPANT");
+    expect(d.ready).toBe(true); // 7 winners already credited
+    expect(d.complete).toBe(false); // but 8 expected
+    expect(d.teamIds).toHaveLength(7);
+  });
+
+  it("is not ready when no match of the stage is decided yet", () => {
+    const d = get(deriveBonusOutcomes(stage("R16", 8, false)), "QF_PARTICIPANT");
     expect(d.ready).toBe(false);
     expect(d.teamIds).toBeNull();
   });
 
-  it("is not ready when the stage is short a match", () => {
-    const d = get(deriveBonusOutcomes(stage("R16", 7)), "QF_PARTICIPANT");
-    expect(d.ready).toBe(false);
-  });
-
-  it("derives the champion from the final", () => {
+  it("derives the champion from the final (complete)", () => {
     const d = get(deriveBonusOutcomes([km("FINAL", "winner", "runnerup")]), "CHAMPION");
     expect(d.ready).toBe(true);
+    expect(d.complete).toBe(true);
     expect(d.teamIds).toEqual(["winner"]);
   });
 

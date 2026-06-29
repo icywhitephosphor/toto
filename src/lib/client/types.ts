@@ -207,7 +207,10 @@ export interface StatBonusCat {
   item_count: number;
   points_per_correct: number;
   item_type: "TEAM" | "PLAYER";
+  /** At least one actual result is in → points are shown and accruing. */
   settled: boolean;
+  /** The actual set is final; until then non-hit picks are pending, not misses. */
+  complete: boolean;
   points_earned: number | null;
   items: BonusPick[];
   actual_items: BonusActual[] | null;

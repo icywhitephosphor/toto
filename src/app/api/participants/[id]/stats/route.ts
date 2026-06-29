@@ -233,16 +233,22 @@ async function loadBonus(participantId: string) {
     .map((cat) => {
       const picks = (picksByBet.get(betByCat.get(cat.id)!) ?? []).slice().sort((a, b) => a.position - b.position);
       const actual = actualByCat.get(cat.id);
-      const settled = !!actual;
+      const settled = !!actual; // any confirmed outcome → points accrue + are shown
+      // Categories settle PARTIALLY: a team is credited the moment it advances,
+      // without waiting for the whole stage. Fully `complete` once the actual set
+      // reaches its final size — every slot is one team, so that size == item_count
+      // (PLAYER / top-scorer is single + manual, so settled == complete there).
+      const complete =
+        cat.itemType === "PLAYER" ? settled : (actual?.teamIds.size ?? 0) >= cat.itemCount;
       const items = picks.map((p) => {
-        let hit: boolean | null = null;
-        if (settled) {
-          hit =
-            cat.itemType === "PLAYER"
-              ? p.playerName != null && actual!.player != null &&
-                normalizePlayerName(p.playerName) === normalizePlayerName(actual!.player)
-              : p.teamId != null && actual!.teamIds.has(p.teamId);
-        }
+        const inActual =
+          cat.itemType === "PLAYER"
+            ? p.playerName != null && actual?.player != null &&
+              normalizePlayerName(p.playerName) === normalizePlayerName(actual.player)
+            : p.teamId != null && (actual?.teamIds.has(p.teamId) ?? false);
+        // true = scored; false = definitively missed (only once complete);
+        // null = still pending — the pick can yet advance → neutral chip, not a miss.
+        const hit: boolean | null = inActual ? true : complete ? false : null;
         return p.teamId
           ? { team_id: p.teamId, code: p.code, name_ru: p.nameRu, hit }
           : { player_name: p.playerName, hit };
@@ -254,6 +260,7 @@ async function loadBonus(participantId: string) {
         points_per_correct: cat.pointsPerCorrect,
         item_type: cat.itemType as "TEAM" | "PLAYER",
         settled,
+        complete,
         points_earned: settled ? (ptsByCat.get(cat.id) ?? 0) : null,
         items,
         actual_items: settled ? actual!.items : null,
