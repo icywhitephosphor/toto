@@ -13,17 +13,23 @@ interface RevealItem {
   name_ru?: string | null;
   player_name?: string | null;
 }
+interface RevealCat {
+  category_id: string;
+  name_ru: string;
+  item_count: number;
+  item_type: "TEAM" | "PLAYER";
+  points_per_correct: number;
+  settled: boolean;
+  /** Final answer set fully known → non-hit picks are real misses, not pending. */
+  complete: boolean;
+  actual_items: RevealItem[] | null;
+  participants: Array<{ participant_id: string; display_name: string; items: RevealItem[]; points_earned: number | null }>;
+}
 interface RevealResp {
   bonus_deadline_at: string;
-  categories: Array<{
-    category_id: string;
-    name_ru: string;
-    item_count: number;
-    points_per_correct: number;
-    settled: boolean;
-    actual_items: RevealItem[] | null;
-    participants: Array<{ participant_id: string; display_name: string; items: RevealItem[]; points_earned: number | null }>;
-  }>;
+  /** Teams already knocked out — a pick of one is a miss even mid-round. */
+  eliminated_team_ids: string[];
+  categories: RevealCat[];
 }
 
 const itemLabel = (it: RevealItem) => it.name_ru ?? it.player_name ?? "?";
@@ -37,6 +43,26 @@ function isHit(it: RevealItem, actual: RevealItem[] | null): boolean {
   return !!name && actual.some((a) => a.player_name?.trim().toLowerCase() === name);
 }
 
+type PickState = "hit" | "miss" | "pending";
+/** hit = advanced (green); miss = out — eliminated, or the round finished without
+ *  it (red); pending = still in the running (neutral). Only meaningful once the
+ *  category has at least one confirmed outcome. */
+function pickState(it: RevealItem, cat: RevealCat, eliminated: Set<string>): PickState {
+  if (!cat.settled) return "pending";
+  if (isHit(it, cat.actual_items)) return "hit";
+  if (it.team_id && eliminated.has(it.team_id)) return "miss";
+  return cat.complete ? "miss" : "pending";
+}
+const pickChipClass = (s: PickState) => (s === "hit" ? "chip-gold" : s === "miss" ? "chip-miss" : "");
+
+/** Heading for the actual-outcome row — never "Верно" (reads as the viewer's own
+ *  correct picks). It's the global result; partial knockout sets show a count. */
+function actualLabel(cat: RevealCat): string {
+  if (cat.item_type === "PLAYER") return "Бомбардир";
+  const base = "Прошли дальше";
+  return cat.complete ? base : `${base} · ${cat.actual_items?.length ?? 0} из ${cat.item_count}`;
+}
+
 export default function BonusRevealPage() {
   const { data: boot } = useBootstrap();
   const { data, isLoading, error } = useSWR<RevealResp>(boot?.participant ? "/bonus/reveal" : null);
@@ -47,6 +73,7 @@ export default function BonusRevealPage() {
     const list = data?.categories[0]?.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) ?? [];
     return [...list].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }, [data]);
+  const eliminated = useMemo(() => new Set(data?.eliminated_team_ids ?? []), [data]);
 
   const selectedId = picked ?? boot?.participant?.id ?? people[0]?.id ?? null;
 
@@ -76,9 +103,9 @@ export default function BonusRevealPage() {
           </div>
 
           {mode === "person" ? (
-            <PersonView data={data} people={people} selectedId={selectedId} meId={boot.participant.id} onPick={setPicked} />
+            <PersonView data={data} people={people} selectedId={selectedId} meId={boot.participant.id} onPick={setPicked} eliminated={eliminated} />
           ) : (
-            <CategoryView data={data} />
+            <CategoryView data={data} eliminated={eliminated} />
           )}
         </>
       )}
@@ -92,12 +119,14 @@ function PersonView({
   selectedId,
   meId,
   onPick,
+  eliminated,
 }: {
   data: RevealResp;
   people: Array<{ id: string; name: string }>;
   selectedId: string | null;
   meId: string;
   onPick: (id: string) => void;
+  eliminated: Set<string>;
 }) {
   const total = data.categories.reduce((sum, c) => {
     const p = c.participants.find((x) => x.participant_id === selectedId);
@@ -132,7 +161,7 @@ function PersonView({
             <div className="row wrap gap-6 mt-12">
               {person?.items.length
                 ? person.items.map((it, i) => (
-                    <span key={i} className={`chip ${c.settled && isHit(it, c.actual_items) ? "chip-gold" : ""}`}>
+                    <span key={i} className={`chip ${pickChipClass(pickState(it, c, eliminated))}`}>
                       {it.code && <span className="tflag" style={{ fontSize: 14 }}>{flag(it.code)}</span>}
                       {itemLabel(it)}
                     </span>
@@ -141,7 +170,7 @@ function PersonView({
             </div>
             {c.settled && c.actual_items && (
               <div className="row wrap gap-6 mt-12" style={{ alignItems: "center" }}>
-                <span className="faint" style={{ fontSize: 12 }}>Верно:</span>
+                <span className="faint" style={{ fontSize: 12 }}>{actualLabel(c)}:</span>
                 {c.actual_items.map((it, i) => (
                   <span key={i} className="chip chip-gold">{itemText(it)}</span>
                 ))}
@@ -154,7 +183,7 @@ function PersonView({
   );
 }
 
-function CategoryView({ data }: { data: RevealResp }) {
+function CategoryView({ data, eliminated }: { data: RevealResp; eliminated: Set<string> }) {
   const [catId, setCatId] = useState<string | null>(null);
   // Resolve against the live list every render so a not-yet-chosen (null) or
   // stale id always falls back to the first category — the view can never go
@@ -172,24 +201,38 @@ function CategoryView({ data }: { data: RevealResp }) {
         <section key={c.category_id} className="card card-pad">
           <div className="row between">
             <div className="section-title" style={{ fontSize: 16 }}>{c.name_ru}</div>
-            <span className={`chip ${c.settled ? "chip-open" : "chip-locked"}`}>
-              {c.settled ? "подсчитано" : "ожидает"} · {c.points_per_correct} очк.
+            <span className={`chip ${!c.settled ? "chip-locked" : c.complete ? "chip-open" : "chip-gold"}`}>
+              {!c.settled ? "ожидает" : c.complete ? "подсчитано" : "идёт"} · {c.points_per_correct} очк./шт
             </span>
           </div>
           {c.settled && c.actual_items && (
             <div className="row wrap gap-6 mt-12">
-              <span className="faint" style={{ fontSize: 12 }}>Верно:</span>
+              <span className="faint" style={{ fontSize: 12 }}>{actualLabel(c)}:</span>
               {c.actual_items.map((it, i) => (
                 <span key={i} className="chip chip-gold">{itemText(it)}</span>
               ))}
+            </div>
+          )}
+          {c.settled && c.item_type === "TEAM" && (
+            <div className="faint mt-8" style={{ fontSize: 11 }}>
+              у каждого: <span style={{ color: "var(--gold)" }}>прошли</span> ·{" "}
+              <span style={{ color: "var(--coral)", textDecoration: "line-through" }}>вылетели</span> ·{" "}
+              обычным — ещё в игре
             </div>
           )}
           <div className="stack mt-12">
             {c.participants.map((p) => (
               <div key={p.participant_id} className="lb-row" style={{ gridTemplateColumns: "108px 1fr auto", gap: 10, padding: "10px 0", alignItems: "start" }}>
                 <span className="lb-name" style={{ fontSize: 13 }}>{p.display_name}</span>
-                <span className="faint" style={{ fontSize: 12, lineHeight: 1.5 }}>
-                  {p.items.length ? p.items.map(itemText).join(", ") : "—"}
+                <span className="faint" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                  {p.items.length
+                    ? p.items.map((it, i) => (
+                        <span key={i}>
+                          <PickInline it={it} cat={c} eliminated={eliminated} />
+                          {i < p.items.length - 1 ? ", " : ""}
+                        </span>
+                      ))
+                    : "—"}
                 </span>
                 <span className="lb-pts" style={{ fontSize: 16 }}>{p.points_earned ?? "·"}</span>
               </div>
@@ -199,4 +242,17 @@ function CategoryView({ data }: { data: RevealResp }) {
       ))}
     </div>
   );
+}
+
+/** One pick rendered inline in a comma list: gold if advanced, red+struck if out,
+ *  inherited faint if still in the running. */
+function PickInline({ it, cat, eliminated }: { it: RevealItem; cat: RevealCat; eliminated: Set<string> }) {
+  const s = pickState(it, cat, eliminated);
+  const style =
+    s === "hit"
+      ? { color: "var(--gold)" }
+      : s === "miss"
+        ? { color: "var(--coral)", textDecoration: "line-through" as const }
+        : undefined;
+  return <span style={style}>{itemText(it)}</span>;
 }

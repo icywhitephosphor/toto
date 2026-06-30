@@ -2,7 +2,7 @@
 // categories, available only after the global bonus deadline (06 §3.14, 11 §6).
 // 403 REVEAL_BEFORE_DEADLINE until then. points_earned is null until a category
 // is settled by the admin.
-import { eq, asc, inArray } from "drizzle-orm";
+import { eq, asc, and, ne, inArray, isNotNull } from "drizzle-orm";
 import { route, ok, AppError } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { requireParticipant } from "@/lib/auth";
@@ -15,6 +15,8 @@ import {
   scoreEvents,
   participants,
   teams,
+  matches,
+  matchResults,
 } from "@/db/schema";
 import { getTournament, isBonusLocked } from "@/lib/api/tournament";
 import { TOURNAMENT_ID } from "@/lib/env";
@@ -102,17 +104,49 @@ export const GET = route(async (req) => {
     );
   }
 
+  // Teams eliminated so far = losers of completed (usable) knockout matches.
+  // A picked team that's already out is a DEFINITIVE miss for any stage-participant
+  // / champion category even before the round finishes (symmetric to early
+  // crediting); a still-alive pick stays neutral until it advances or is out.
+  const koResults = await db
+    .select({
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      winnerTeamId: matchResults.winnerTeamId,
+    })
+    .from(matches)
+    .innerJoin(matchResults, eq(matchResults.matchId, matches.id))
+    .where(
+      and(
+        ne(matches.stage, "GROUP"),
+        inArray(matchResults.resultStatus, ["FT", "AET", "PEN"]),
+        eq(matchResults.confirmed, true),
+        isNotNull(matchResults.winnerTeamId),
+      ),
+    );
+  const eliminated = new Set<string>();
+  for (const r of koResults) {
+    const loser = r.winnerTeamId === r.homeTeamId ? r.awayTeamId : r.homeTeamId;
+    if (loser) eliminated.add(loser);
+  }
+
   const categories = cats.map((cat) => {
     const settled = actualByCat.has(cat.id);
+    const actual = actualByCat.get(cat.id) ?? [];
+    // Final answer set is fully known once it reaches its size (one team per slot;
+    // a manual single-player category is complete as soon as it's settled).
+    const complete = cat.itemType === "PLAYER" ? settled : actual.length >= cat.itemCount;
     const byPart = picks.get(cat.id) ?? new Map();
     const ptsByPart = pointsByCatPart.get(cat.id) ?? new Map();
     return {
       category_id: cat.id,
       name_ru: cat.nameRu,
       item_count: cat.itemCount,
+      item_type: cat.itemType as "TEAM" | "PLAYER",
       points_per_correct: cat.pointsPerCorrect,
       settled,
-      actual_items: settled ? actualByCat.get(cat.id)! : null,
+      complete,
+      actual_items: settled ? actual : null,
       participants: parts.map((p) => {
         const items = (byPart.get(p.id) ?? [])
           .slice()
@@ -128,5 +162,5 @@ export const GET = route(async (req) => {
     };
   });
 
-  return ok({ bonus_deadline_at: t.bonusDeadlineAt.toISOString(), categories });
+  return ok({ bonus_deadline_at: t.bonusDeadlineAt.toISOString(), eliminated_team_ids: [...eliminated], categories });
 });

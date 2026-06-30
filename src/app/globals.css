@@ -213,6 +213,8 @@ button { font: inherit; color: inherit; }
 .chip-open { color: var(--pitch-deep); border-color: color-mix(in srgb, var(--pitch) 35%, transparent); background: var(--pitch-faint); }
 .chip-locked { color: var(--ink-faint); }
 .chip-gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 35%, transparent); }
+/* A pick that's out — team eliminated / final answer missed. Red + struck through. */
+.chip-miss { color: var(--coral); border-color: color-mix(in srgb, var(--coral) 32%, transparent); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--coral) 55%, transparent); }
 /* Kickoff countdown — a cool blue, clearly distinct from the green/red betting
    deadline. color-mix keeps it readable on both themes. */
 .chip-kickoff { color: var(--sky); border-color: color-mix(in srgb, var(--sky) 38%, transparent); background: color-mix(in srgb, var(--sky) 12%, transparent); }

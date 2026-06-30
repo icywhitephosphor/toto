@@ -8,7 +8,7 @@
 // computed from the VISUAL position (index+1), matching the table and Sheets
 // (leaderboard/page.tsx, sheets.ts both use prizeForPlace(index+1)), NOT the
 // dense place which can tie.
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, ne, inArray, isNotNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { route, ok, AppError } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -16,6 +16,7 @@ import { requireParticipant } from "@/lib/auth";
 import { db } from "@/db";
 import {
   matches,
+  matchResults,
   participants,
   scoreEvents,
   teams,
@@ -221,6 +222,26 @@ async function loadBonus(participantId: string) {
     }
   }
 
+  // Teams already knocked out (losers of usable knockout matches) → a pick of one
+  // is a definitive miss even before the round ends, mirroring early crediting.
+  const koResults = await db
+    .select({ homeTeamId: matches.homeTeamId, awayTeamId: matches.awayTeamId, winnerTeamId: matchResults.winnerTeamId })
+    .from(matches)
+    .innerJoin(matchResults, eq(matchResults.matchId, matches.id))
+    .where(
+      and(
+        ne(matches.stage, "GROUP"),
+        inArray(matchResults.resultStatus, ["FT", "AET", "PEN"]),
+        eq(matchResults.confirmed, true),
+        isNotNull(matchResults.winnerTeamId),
+      ),
+    );
+  const eliminated = new Set<string>();
+  for (const r of koResults) {
+    const loser = r.winnerTeamId === r.homeTeamId ? r.awayTeamId : r.homeTeamId;
+    if (loser) eliminated.add(loser);
+  }
+
   const scoreRows = await db
     .select({ categoryId: scoreEvents.categoryId, points: scoreEvents.points })
     .from(scoreEvents)
@@ -246,9 +267,10 @@ async function loadBonus(participantId: string) {
             ? p.playerName != null && actual?.player != null &&
               normalizePlayerName(p.playerName) === normalizePlayerName(actual.player)
             : p.teamId != null && (actual?.teamIds.has(p.teamId) ?? false);
-        // true = scored; false = definitively missed (only once complete);
-        // null = still pending — the pick can yet advance → neutral chip, not a miss.
-        const hit: boolean | null = inActual ? true : complete ? false : null;
+        // true = scored; false = definitively missed (round over, or this team is
+        // already knocked out); null = still pending — can yet advance → neutral.
+        const isOut = p.teamId != null && eliminated.has(p.teamId);
+        const hit: boolean | null = inActual ? true : complete || isOut ? false : null;
         return p.teamId
           ? { team_id: p.teamId, code: p.code, name_ru: p.nameRu, hit }
           : { player_name: p.playerName, hit };

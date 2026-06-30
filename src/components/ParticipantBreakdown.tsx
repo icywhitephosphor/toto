@@ -137,7 +137,7 @@ function BonusList({ bonus }: { bonus: StatBonusCat[] }) {
             {cat.items.map((it, i) => (
               <span
                 key={i}
-                className={`chip ${it.hit === true ? "chip-open" : it.hit === false ? "chip-locked" : ""}`}
+                className={`chip ${it.hit === true ? "chip-open" : it.hit === false ? "chip-miss" : ""}`}
                 style={{ textTransform: "none", letterSpacing: 0 }}
               >
                 {it.player_name ?? `${flag(it.code)} ${it.name_ru}`}
