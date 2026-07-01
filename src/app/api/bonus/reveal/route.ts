@@ -130,6 +130,20 @@ export const GET = route(async (req) => {
     if (loser) eliminated.add(loser);
   }
 
+  // Teams that reached the knockouts = the R32 bracket. A picked team NOT here
+  // never made it out of the group → also a definitive miss for any knockout
+  // category (Turkey, Scotland, …). Only trusted once the bracket is seeded
+  // (non-empty), so a pre-seed reveal can't wrongly strike everyone.
+  const r32Rows = await db
+    .select({ home: matches.homeTeamId, away: matches.awayTeamId })
+    .from(matches)
+    .where(eq(matches.stage, "R32"));
+  const qualified = new Set<string>();
+  for (const m of r32Rows) {
+    if (m.home) qualified.add(m.home);
+    if (m.away) qualified.add(m.away);
+  }
+
   const categories = cats.map((cat) => {
     const settled = actualByCat.has(cat.id);
     const actual = actualByCat.get(cat.id) ?? [];
@@ -162,5 +176,10 @@ export const GET = route(async (req) => {
     };
   });
 
-  return ok({ bonus_deadline_at: t.bonusDeadlineAt.toISOString(), eliminated_team_ids: [...eliminated], categories });
+  return ok({
+    bonus_deadline_at: t.bonusDeadlineAt.toISOString(),
+    eliminated_team_ids: [...eliminated],
+    qualified_team_ids: [...qualified],
+    categories,
+  });
 });

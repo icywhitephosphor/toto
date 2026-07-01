@@ -27,8 +27,11 @@ interface RevealCat {
 }
 interface RevealResp {
   bonus_deadline_at: string;
-  /** Teams already knocked out — a pick of one is a miss even mid-round. */
+  /** Teams already knocked out in the play-offs — a pick of one is a miss. */
   eliminated_team_ids: string[];
+  /** Teams that reached the R32 bracket; a pick outside this set never made it
+   *  out of the group → also a miss (once the bracket is seeded). */
+  qualified_team_ids: string[];
   categories: RevealCat[];
 }
 
@@ -44,13 +47,13 @@ function isHit(it: RevealItem, actual: RevealItem[] | null): boolean {
 }
 
 type PickState = "hit" | "miss" | "pending";
-/** hit = advanced (green); miss = out — eliminated, or the round finished without
- *  it (red); pending = still in the running (neutral). Only meaningful once the
- *  category has at least one confirmed outcome. */
-function pickState(it: RevealItem, cat: RevealCat, eliminated: Set<string>): PickState {
+/** hit = advanced (green); miss = out — knocked out, never qualified, or the round
+ *  finished without it (red); pending = still in the running (neutral). Only
+ *  meaningful once the category has at least one confirmed outcome. */
+function pickState(it: RevealItem, cat: RevealCat, isOut: (teamId: string) => boolean): PickState {
   if (!cat.settled) return "pending";
   if (isHit(it, cat.actual_items)) return "hit";
-  if (it.team_id && eliminated.has(it.team_id)) return "miss";
+  if (it.team_id && isOut(it.team_id)) return "miss";
   return cat.complete ? "miss" : "pending";
 }
 const pickChipClass = (s: PickState) => (s === "hit" ? "chip-gold" : s === "miss" ? "chip-miss" : "");
@@ -73,7 +76,13 @@ export default function BonusRevealPage() {
     const list = data?.categories[0]?.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) ?? [];
     return [...list].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }, [data]);
-  const eliminated = useMemo(() => new Set(data?.eliminated_team_ids ?? []), [data]);
+  // A team is definitively out if it lost a play-off match OR (once the R32
+  // bracket is seeded) it isn't in it — i.e. it never got out of the group.
+  const isOut = useMemo(() => {
+    const eliminated = new Set(data?.eliminated_team_ids ?? []);
+    const qualified = new Set(data?.qualified_team_ids ?? []);
+    return (teamId: string) => eliminated.has(teamId) || (qualified.size > 0 && !qualified.has(teamId));
+  }, [data]);
 
   const selectedId = picked ?? boot?.participant?.id ?? people[0]?.id ?? null;
 
@@ -103,9 +112,9 @@ export default function BonusRevealPage() {
           </div>
 
           {mode === "person" ? (
-            <PersonView data={data} people={people} selectedId={selectedId} meId={boot.participant.id} onPick={setPicked} eliminated={eliminated} />
+            <PersonView data={data} people={people} selectedId={selectedId} meId={boot.participant.id} onPick={setPicked} isOut={isOut} />
           ) : (
-            <CategoryView data={data} eliminated={eliminated} />
+            <CategoryView data={data} isOut={isOut} />
           )}
         </>
       )}
@@ -119,14 +128,14 @@ function PersonView({
   selectedId,
   meId,
   onPick,
-  eliminated,
+  isOut,
 }: {
   data: RevealResp;
   people: Array<{ id: string; name: string }>;
   selectedId: string | null;
   meId: string;
   onPick: (id: string) => void;
-  eliminated: Set<string>;
+  isOut: (teamId: string) => boolean;
 }) {
   const total = data.categories.reduce((sum, c) => {
     const p = c.participants.find((x) => x.participant_id === selectedId);
@@ -161,7 +170,7 @@ function PersonView({
             <div className="row wrap gap-6 mt-12">
               {person?.items.length
                 ? person.items.map((it, i) => (
-                    <span key={i} className={`chip ${pickChipClass(pickState(it, c, eliminated))}`}>
+                    <span key={i} className={`chip ${pickChipClass(pickState(it, c, isOut))}`}>
                       {it.code && <span className="tflag" style={{ fontSize: 14 }}>{flag(it.code)}</span>}
                       {itemLabel(it)}
                     </span>
@@ -183,7 +192,7 @@ function PersonView({
   );
 }
 
-function CategoryView({ data, eliminated }: { data: RevealResp; eliminated: Set<string> }) {
+function CategoryView({ data, isOut }: { data: RevealResp; isOut: (teamId: string) => boolean }) {
   const [catId, setCatId] = useState<string | null>(null);
   // Resolve against the live list every render so a not-yet-chosen (null) or
   // stale id always falls back to the first category — the view can never go
@@ -228,7 +237,7 @@ function CategoryView({ data, eliminated }: { data: RevealResp; eliminated: Set<
                   {p.items.length
                     ? p.items.map((it, i) => (
                         <span key={i}>
-                          <PickInline it={it} cat={c} eliminated={eliminated} />
+                          <PickInline it={it} cat={c} isOut={isOut} />
                           {i < p.items.length - 1 ? ", " : ""}
                         </span>
                       ))
@@ -246,8 +255,8 @@ function CategoryView({ data, eliminated }: { data: RevealResp; eliminated: Set<
 
 /** One pick rendered inline in a comma list: gold if advanced, red+struck if out,
  *  inherited faint if still in the running. */
-function PickInline({ it, cat, eliminated }: { it: RevealItem; cat: RevealCat; eliminated: Set<string> }) {
-  const s = pickState(it, cat, eliminated);
+function PickInline({ it, cat, isOut }: { it: RevealItem; cat: RevealCat; isOut: (teamId: string) => boolean }) {
+  const s = pickState(it, cat, isOut);
   const style =
     s === "hit"
       ? { color: "var(--gold)" }

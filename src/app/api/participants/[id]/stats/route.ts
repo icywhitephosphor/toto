@@ -241,6 +241,19 @@ async function loadBonus(participantId: string) {
     const loser = r.winnerTeamId === r.homeTeamId ? r.awayTeamId : r.homeTeamId;
     if (loser) eliminated.add(loser);
   }
+  // Teams in the R32 bracket = everyone who got out of the group. A picked team
+  // outside it never qualified → also a definitive miss (trusted once seeded).
+  const r32Rows = await db
+    .select({ home: matches.homeTeamId, away: matches.awayTeamId })
+    .from(matches)
+    .where(eq(matches.stage, "R32"));
+  const qualified = new Set<string>();
+  for (const m of r32Rows) {
+    if (m.home) qualified.add(m.home);
+    if (m.away) qualified.add(m.away);
+  }
+  const isTeamOut = (teamId: string) =>
+    eliminated.has(teamId) || (qualified.size > 0 && !qualified.has(teamId));
 
   const scoreRows = await db
     .select({ categoryId: scoreEvents.categoryId, points: scoreEvents.points })
@@ -268,9 +281,11 @@ async function loadBonus(participantId: string) {
               normalizePlayerName(p.playerName) === normalizePlayerName(actual.player)
             : p.teamId != null && (actual?.teamIds.has(p.teamId) ?? false);
         // true = scored; false = definitively missed (round over, or this team is
-        // already knocked out); null = still pending — can yet advance → neutral.
-        const isOut = p.teamId != null && eliminated.has(p.teamId);
-        const hit: boolean | null = inActual ? true : complete || isOut ? false : null;
+        // already out — knocked out OR never left the group); null = still pending.
+        // Coloured only once the category has started settling; before that all
+        // picks stay neutral (matches the reveal screen).
+        const isOut = p.teamId != null && isTeamOut(p.teamId);
+        const hit: boolean | null = !settled ? null : inActual ? true : complete || isOut ? false : null;
         return p.teamId
           ? { team_id: p.teamId, code: p.code, name_ru: p.nameRu, hit }
           : { player_name: p.playerName, hit };
