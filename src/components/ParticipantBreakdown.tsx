@@ -15,9 +15,12 @@ import type { ParticipantStats, StatMatch, StatBonusCat } from "@/lib/client/typ
 
 type Filter = "exact" | "outcome" | "x2" | "playoff" | "bonus" | "miss";
 
+const LIST_LIMIT = 5; // collapsed match list shows the 5 most recent; rest behind a button
+
 export function ParticipantBreakdown({ participantId, variant }: { participantId: string; variant: "inline" | "full" }) {
   const { data } = useSWR<ParticipantStats>(`/participants/${participantId}/stats`);
   const [filter, setFilter] = useState<Filter | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const bet = useMemo(() => (data?.matches ?? []).filter((m) => m.kind !== "NO_BET"), [data]);
   const noBet = (data?.matches.length ?? 0) - bet.length;
@@ -48,7 +51,7 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
   ];
 
   // Default list: inline → only point-scoring bets (keeps a table row short);
-  // full → every real bet, chronological.
+  // full → every real bet.
   const shownMatches: StatMatch[] =
     filter === "exact" ? bet.filter((m) => m.kind === "EXACT")
     : filter === "outcome" ? bet.filter((m) => m.kind === "OUTCOME")
@@ -59,6 +62,11 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
     : variant === "inline" ? bet.filter((m) => m.points > 0)
     : bet;
 
+  // Most recent first, and collapsed to the last 5 by default — glance at the
+  // latest results without a long scroll; the button reveals the whole list.
+  const orderedMatches = [...shownMatches].reverse();
+  const visibleMatches = showAll ? orderedMatches : orderedMatches.slice(0, LIST_LIMIT);
+
   return (
     <div className="mt-12">
       <div className="row wrap gap-6">
@@ -68,7 +76,10 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
             type="button"
             disabled={c.count === 0}
             className={`chip ${c.cls} ${filter === c.key ? "sel" : ""}`}
-            onClick={() => setFilter(filter === c.key ? null : c.key)}
+            onClick={() => {
+              setFilter(filter === c.key ? null : c.key);
+              setShowAll(false);
+            }}
           >
             {c.label} · {c.count}
           </button>
@@ -80,10 +91,23 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
       ) : (
         <>
           <div className="stack mt-8" style={{ gap: 4 }}>
-            {shownMatches.map((m) => (
+            {visibleMatches.map((m) => (
               <MatchRow key={m.match_id} m={m} />
             ))}
           </div>
+          {orderedMatches.length > LIST_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              style={{
+                width: "100%", textAlign: "center", padding: "8px 0", marginTop: 4,
+                fontSize: 12, fontWeight: 600, color: "var(--pitch)",
+                background: "transparent", border: "none", cursor: "pointer",
+              }}
+            >
+              {showAll ? "Свернуть ▲" : `Показать все · ${orderedMatches.length} ▼`}
+            </button>
+          )}
           {shownMatches.length === 0 && (
             <div className="faint mt-8" style={{ fontSize: 12 }}>
               {filter ? "Нет ставок в этой категории." : "Пока без очков."}
@@ -122,15 +146,24 @@ function BonusList({ bonus }: { bonus: StatBonusCat[] }) {
   }
   return (
     <div className="stack mt-8" style={{ gap: 8 }}>
-      {bonus.map((cat) => (
+      {bonus.map((cat) => {
+        // "N из MAX" — points earned out of the category's ceiling (every pick
+        // right = item_count × points_per_correct).
+        const maxPts = cat.item_count * cat.points_per_correct;
+        return (
         <div key={cat.category_id} style={{ paddingBottom: 8, borderBottom: "1px solid var(--line)" }}>
           <div className="row between" style={{ fontSize: 12.5 }}>
             <span className="muted">{cat.name_ru}</span>
-            <span className="row gap-6" style={{ flex: "0 0 auto" }}>
+            <span className="row gap-6" style={{ flex: "0 0 auto", alignItems: "baseline" }}>
               {cat.settled && !cat.complete && <span className="faint" style={{ fontSize: 11 }}>идёт</span>}
-              <span className={`mono ${cat.settled ? pointsClass(cat.points_earned ?? 0) : "faint"}`}>
-                {cat.settled ? fmtPts(cat.points_earned ?? 0) : "ещё не разыграно"}
-              </span>
+              {cat.settled ? (
+                <span className="mono">
+                  <span className={pointsClass(cat.points_earned ?? 0)}>{cat.points_earned ?? 0}</span>
+                  <span className="faint"> из {maxPts}</span>
+                </span>
+              ) : (
+                <span className="mono faint">ещё не разыграно · макс. {maxPts}</span>
+              )}
             </span>
           </div>
           <div className="row wrap gap-6" style={{ marginTop: 5 }}>
@@ -146,7 +179,8 @@ function BonusList({ bonus }: { bonus: StatBonusCat[] }) {
             ))}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
