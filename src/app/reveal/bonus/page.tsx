@@ -47,11 +47,12 @@ function isHit(it: RevealItem, actual: RevealItem[] | null): boolean {
 }
 
 type PickState = "hit" | "miss" | "pending";
-/** hit = advanced (green); miss = out — knocked out, never qualified, or the round
- *  finished without it (red); pending = still in the running (neutral). Only
- *  meaningful once the category has at least one confirmed outcome. */
+/** hit = reached this stage (green); miss = out — knocked out or never qualified,
+ *  so it can't reach this stage OR any later one either (red); pending = still in
+ *  the running (neutral). A team already out is a miss in EVERY future category,
+ *  even ones that haven't started settling — e.g. once Germany is out, it's a miss
+ *  for 1/4, 1/2, finalist and champion right away, not just 1/8. */
 function pickState(it: RevealItem, cat: RevealCat, isOut: (teamId: string) => boolean): PickState {
-  if (!cat.settled) return "pending";
   if (isHit(it, cat.actual_items)) return "hit";
   if (it.team_id && isOut(it.team_id)) return "miss";
   return cat.complete ? "miss" : "pending";

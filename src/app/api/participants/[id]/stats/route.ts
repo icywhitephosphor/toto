@@ -280,12 +280,12 @@ async function loadBonus(participantId: string) {
             ? p.playerName != null && actual?.player != null &&
               normalizePlayerName(p.playerName) === normalizePlayerName(actual.player)
             : p.teamId != null && (actual?.teamIds.has(p.teamId) ?? false);
-        // true = scored; false = definitively missed (round over, or this team is
-        // already out — knocked out OR never left the group); null = still pending.
-        // Coloured only once the category has started settling; before that all
-        // picks stay neutral (matches the reveal screen).
+        // true = reached this stage; false = definitively missed — round over, or
+        // this team is already OUT (knocked out / never left the group), which
+        // rules it out of THIS stage and every later one too, so it's struck even
+        // in categories that haven't started settling; null = still pending.
         const isOut = p.teamId != null && isTeamOut(p.teamId);
-        const hit: boolean | null = !settled ? null : inActual ? true : complete || isOut ? false : null;
+        const hit: boolean | null = inActual ? true : complete || isOut ? false : null;
         return p.teamId
           ? { team_id: p.teamId, code: p.code, name_ru: p.nameRu, hit }
           : { player_name: p.playerName, hit };
