@@ -75,11 +75,10 @@ export function LoginScreen() {
     const detect = () => {
       if (cancelled || started.current) return;
       const wa = window.Telegram?.WebApp;
-      wa?.ready?.(); // nudge the SDK to surface initData if it has it
+      // ready()/expand() are handled globally by TelegramInit — no per-tick spam.
       const initData = wa?.initData || initDataFromHash();
       if (initData && initData.length > 0) {
         started.current = true;
-        wa?.expand?.();
         setMode("telegram");
         void doMiniAppLogin();
         return;

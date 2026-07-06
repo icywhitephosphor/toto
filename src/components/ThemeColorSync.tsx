@@ -45,9 +45,15 @@ function apply() {
 export function ThemeColorSync() {
   useEffect(() => {
     apply();
+    // The SDK script is async — re-apply a few times so the Telegram header
+    // colours land even when telegram.org responds late on mobile networks.
+    const retries = [1000, 3000, 10_000].map((ms) => setTimeout(apply, ms));
     const obs = new MutationObserver(apply);
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => obs.disconnect();
+    return () => {
+      obs.disconnect();
+      retries.forEach(clearTimeout);
+    };
   }, []);
   return null;
 }

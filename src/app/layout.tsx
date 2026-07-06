@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Oswald, Onest, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { ThemeColorSync } from "@/components/ThemeColorSync";
+import { TelegramInit } from "@/components/TelegramInit";
 
 // Cyrillic-complete typeface trio. Oswald = condensed stadium/scoreboard display,
 // Onest = modern grotesk body, JetBrains Mono = numerals/countdowns.
@@ -40,10 +41,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        {/* Telegram Mini App SDK — load early so initData is available on mount. */}
-        <script src="https://telegram.org/js/telegram-web-app.js" />
+        {/* Telegram Mini App SDK. `async` is critical: telegram.org is slow or
+            outright blocked on RU mobile networks, and a sync script here holds
+            the ENTIRE first paint hostage (blank screen on phones). Login reads
+            initData from the URL hash as a fallback, and TelegramInit/[Back]/
+            ThemeColorSync all poll for the SDK, so late arrival is fine. */}
+        <link rel="preconnect" href="https://telegram.org" />
+        <script src="https://telegram.org/js/telegram-web-app.js" async />
       </head>
       <body>
+        <TelegramInit />
         <ThemeColorSync />
         <Providers>{children}</Providers>
       </body>

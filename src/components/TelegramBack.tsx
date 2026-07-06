@@ -35,7 +35,8 @@ export function TelegramBack() {
       try { wa?.disableVerticalSwipes?.(); } catch { /* old client */ }
       const bb = wa?.BackButton;
       if (!bb) {
-        if (attempts++ < 20) setTimeout(apply, 150);
+        // ~10s: the SDK script is async now and can land late on slow networks.
+        if (attempts++ < 67) setTimeout(apply, 150);
         return;
       }
       bound = bb;
