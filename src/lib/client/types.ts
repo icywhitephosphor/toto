@@ -146,11 +146,21 @@ export interface LiveBlock {
   rows: LiveRow[];
 }
 
+/** Per-participant points sliced by bet category (table filter chips). */
+export interface LeaderboardFacets {
+  exact: number;
+  outcome: number;
+  x2: number;
+  group: number;
+  playoff: number;
+}
+
 export interface Leaderboard {
   server_time: string;
   generated_at: string | null;
   reason: string | null;
   rows: LeaderboardRow[];
+  facets?: Record<string, LeaderboardFacets>;
   live?: LiveBlock;
 }
 

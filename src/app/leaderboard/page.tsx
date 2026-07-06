@@ -10,9 +10,26 @@ import { pointsClass, fmtPts } from "@/lib/client/points";
 import { flag } from "@/lib/client/flags";
 import { useFlip } from "@/lib/client/useFlip";
 import { PRIZES, PRIZE_POOL, prizeForPlace } from "@/domain/prizes";
-import type { Leaderboard, LeaderboardRow, LiveBlock, LiveRow } from "@/lib/client/types";
+import type { Leaderboard, LeaderboardRow, LeaderboardFacets, LiveBlock, LiveRow } from "@/lib/client/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
+
+// Table filter chips: re-rank everyone by one slice of their points.
+// Prizes/medals stay tied to the OVERALL table only.
+type Facet = "exact" | "outcome" | "x2" | "group" | "playoff" | "bonus";
+const FACETS: Array<{ key: Facet; label: string }> = [
+  { key: "exact", label: "Точный счёт" },
+  { key: "outcome", label: "Исход" },
+  { key: "x2", label: "Х2" },
+  { key: "group", label: "Группы" },
+  { key: "playoff", label: "Плей-офф" },
+  { key: "bonus", label: "Бонусы" },
+];
+
+function facetValue(facet: Facet, r: LeaderboardRow, facets?: Record<string, LeaderboardFacets>): number {
+  if (facet === "bonus") return r.bonus_points;
+  return facets?.[r.participant_id]?.[facet] ?? 0;
+}
 
 export default function LeaderboardPage() {
   const { data: boot } = useBootstrap();
@@ -24,11 +41,22 @@ export default function LeaderboardPage() {
   const meId = boot?.participant?.id;
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<"official" | "live">("official");
+  const [facet, setFacet] = useState<Facet | null>(null);
 
   const rows = data?.rows ?? [];
   const live = data?.live;
   const liveActive = !!live?.active;
   const mode = liveActive && view === "live" ? "live" : "official";
+
+  // Facet mode: same people, re-ranked by the chosen slice (ties → overall).
+  const facetRows = useMemo(() => {
+    if (!facet) return rows;
+    return [...rows].sort(
+      (a, b) =>
+        facetValue(facet, b, data?.facets) - facetValue(facet, a, data?.facets) ||
+        b.total_points - a.total_points,
+    );
+  }, [facet, rows, data]);
 
   return (
     <div>
@@ -51,11 +79,46 @@ export default function LeaderboardPage() {
       {isLoading && <CardSkeleton count={6} />}
       {!isLoading && rows.length === 0 && <Empty title="Пока пусто" sub="Очки появятся после первых результатов." />}
 
+      {rows.length > 0 && mode === "official" && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4, WebkitOverflowScrolling: "touch" }}>
+          <button
+            type="button"
+            className={`chip ${facet === null ? "sel" : ""}`}
+            style={{ flex: "0 0 auto", cursor: "pointer" }}
+            onClick={() => setFacet(null)}
+          >
+            Все очки
+          </button>
+          {FACETS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`chip ${facet === f.key ? "sel" : ""}`}
+              style={{ flex: "0 0 auto", cursor: "pointer" }}
+              onClick={() => setFacet(facet === f.key ? null : f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {rows.length > 0 && mode === "live" && live ? (
         <LiveTable rows={rows} live={live} meId={meId} open={open} setOpen={setOpen} />
       ) : rows.length > 0 ? (
-        <OfficialTable rows={rows} meId={meId} open={open} setOpen={setOpen} />
+        <OfficialTable
+          rows={facetRows}
+          meId={meId}
+          open={open}
+          setOpen={setOpen}
+          facetOf={facet ? (r) => facetValue(facet, r, data?.facets) : null}
+        />
       ) : null}
+      {facet && mode === "official" && (
+        <div className="faint center" style={{ fontSize: 11, marginTop: 6 }}>
+          зачёт «{FACETS.find((f) => f.key === facet)?.label}» · призовые места — по общей таблице
+        </div>
+      )}
 
       <div className="card mt-16">
         <div className="card-pad row between" style={{ paddingBottom: 8 }}>
@@ -76,11 +139,13 @@ export default function LeaderboardPage() {
   );
 }
 
-function OfficialTable({ rows, meId, open, setOpen }: {
+function OfficialTable({ rows, meId, open, setOpen, facetOf }: {
   rows: LeaderboardRow[];
   meId?: string;
   open: string | null;
   setOpen: (v: string | null) => void;
+  /** Facet mode: value to rank/show instead of the overall total (null = off). */
+  facetOf?: ((r: LeaderboardRow) => number) | null;
 }) {
   const flipRef = useFlip(rows.map((r) => r.participant_id).join(","));
   return (
@@ -88,6 +153,7 @@ function OfficialTable({ rows, meId, open, setOpen }: {
       {rows.map((r, i) => (
         <div key={r.participant_id} data-flip-key={r.participant_id}>
           <Row r={r} pos={i + 1} me={r.participant_id === meId} open={open === r.participant_id}
+            facetValue={facetOf ? facetOf(r) : null}
             onToggle={() => setOpen(open === r.participant_id ? null : r.participant_id)} />
         </div>
       ))}
@@ -201,12 +267,17 @@ function LiveTable({ rows, live, meId, open, setOpen }: {
 // pos is the visual position in the current order (1..N): while everyone is
 // tied at zero the list is alphabetical and still numbered straight through,
 // per the organizer's call. The prize markers follow this visual position.
-function Row({ r, pos, me, open, onToggle }: { r: LeaderboardRow; pos: number; me: boolean; open: boolean; onToggle: () => void }) {
-  const prize = prizeForPlace(pos);
+// facetValue != null → facet mode: rank by a slice; medals/prizes are hidden
+// (they belong to the overall table) and the slice is the big number.
+function Row({ r, pos, me, open, onToggle, facetValue }: {
+  r: LeaderboardRow; pos: number; me: boolean; open: boolean; onToggle: () => void; facetValue?: number | null;
+}) {
+  const facetMode = facetValue != null;
+  const prize = facetMode ? null : prizeForPlace(pos);
   return (
     <div>
       <button
-        className={`lb-row ${pos <= 3 ? `p${pos}` : ""} ${prize ? "prize" : ""} ${me ? "me" : ""}`}
+        className={`lb-row ${!facetMode && pos <= 3 ? `p${pos}` : ""} ${prize ? "prize" : ""} ${me ? "me" : ""}`}
         style={{ width: "100%", background: me ? "var(--pitch-faint)" : "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
         onClick={onToggle}
       >
@@ -214,11 +285,23 @@ function Row({ r, pos, me, open, onToggle }: { r: LeaderboardRow; pos: number; m
         <span>
           <span className="lb-name">{r.display_name}{me && <span className="faint"> · вы</span>}</span>
           <span className="lb-sub">
-            матчи {r.match_points} · бонусы {r.bonus_points}
-            {prize && <span style={{ color: "var(--gold)" }}> · {fmtRub(prize.amount)}</span>}
+            {facetMode ? (
+              <>всего {r.total_points}</>
+            ) : (
+              <>
+                матчи {r.match_points} · бонусы {r.bonus_points}
+                {prize && <span style={{ color: "var(--gold)" }}> · {fmtRub(prize.amount)}</span>}
+              </>
+            )}
           </span>
         </span>
-        <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>
+        {facetMode ? (
+          <span className={`lb-pts ${facetValue === 0 ? "zero" : ""} ${facetValue < 0 ? "pts-neg" : ""}`}>
+            {facetValue}
+          </span>
+        ) : (
+          <span className={`lb-pts ${r.total_points === 0 ? "zero" : ""}`}>{r.total_points}</span>
+        )}
       </button>
 
       {open && (
