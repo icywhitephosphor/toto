@@ -50,8 +50,9 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
     { key: "miss", label: "Мимо", count: counts.miss, cls: "" },
   ];
 
-  // Default list: inline → bets that MOVED the total, including negative x2
-  // misses (points ≠ 0 — a −4 must not vanish); full → every real bet.
+  // Default list: EVERY real bet, zeros included — "the last 5 bets" must mean
+  // exactly that, or matches seem to vanish for whoever missed without x2 (0
+  // points). The collapse-to-5 keeps rows short; chips give the filtered cuts.
   const shownMatches: StatMatch[] =
     filter === "exact" ? bet.filter((m) => m.kind === "EXACT")
     : filter === "outcome" ? bet.filter((m) => m.kind === "OUTCOME")
@@ -59,7 +60,6 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
     : filter === "x2" ? bet.filter((m) => m.x2)
     : filter === "playoff" ? bet.filter((m) => m.stage !== "GROUP")
     : filter === "bonus" ? []
-    : variant === "inline" ? bet.filter((m) => m.points !== 0)
     : bet;
 
   // Most recent first BY KICKOFF TIME (fifa_match_no is bracket order, not
@@ -116,9 +116,9 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
               {filter ? "Нет ставок в этой категории." : "Пока без очков."}
             </div>
           )}
-          {filter === null && variant === "inline" && (counts.miss > 0 || noBet > 0) && (
+          {filter === null && variant === "inline" && noBet > 0 && (
             <div className="faint mt-8" style={{ fontSize: 11 }}>
-              мимо {counts.miss}{noBet > 0 ? ` · без ставки ${noBet}` : ""} · весь список — в профиле
+              без ставки {noBet}
             </div>
           )}
         </>
