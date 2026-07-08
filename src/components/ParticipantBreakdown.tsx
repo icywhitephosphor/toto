@@ -50,8 +50,8 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
     { key: "miss", label: "Мимо", count: counts.miss, cls: "" },
   ];
 
-  // Default list: inline → only point-scoring bets (keeps a table row short);
-  // full → every real bet.
+  // Default list: inline → bets that MOVED the total, including negative x2
+  // misses (points ≠ 0 — a −4 must not vanish); full → every real bet.
   const shownMatches: StatMatch[] =
     filter === "exact" ? bet.filter((m) => m.kind === "EXACT")
     : filter === "outcome" ? bet.filter((m) => m.kind === "OUTCOME")
@@ -59,12 +59,15 @@ export function ParticipantBreakdown({ participantId, variant }: { participantId
     : filter === "x2" ? bet.filter((m) => m.x2)
     : filter === "playoff" ? bet.filter((m) => m.stage !== "GROUP")
     : filter === "bonus" ? []
-    : variant === "inline" ? bet.filter((m) => m.points > 0)
+    : variant === "inline" ? bet.filter((m) => m.points !== 0)
     : bet;
 
-  // Most recent first, and collapsed to the last 5 by default — glance at the
-  // latest results without a long scroll; the button reveals the whole list.
-  const orderedMatches = [...shownMatches].reverse();
+  // Most recent first BY KICKOFF TIME (fifa_match_no is bracket order, not
+  // chronological in the play-offs), collapsed to the last 5 by default; the
+  // button reveals the whole list.
+  const orderedMatches = [...shownMatches].sort((a, b) =>
+    (b.kickoff_at ?? "") < (a.kickoff_at ?? "") ? -1 : (b.kickoff_at ?? "") > (a.kickoff_at ?? "") ? 1 : b.fifa_match_no - a.fifa_match_no,
+  );
   const visibleMatches = showAll ? orderedMatches : orderedMatches.slice(0, LIST_LIMIT);
 
   return (

@@ -186,6 +186,7 @@ export interface StatMatch {
   match_id: string;
   fifa_match_no: number;
   stage: Stage;
+  kickoff_at: string | null;
   home: { code: string | null; name_ru: string | null };
   away: { code: string | null; name_ru: string | null };
   result: [number, number] | null;
